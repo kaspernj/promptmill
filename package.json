@@ -1,0 +1,47 @@
+{
+  "name": "promptmill",
+  "version": "0.1.0",
+  "description": "Run an agent prompt repeatedly in a batch loop, tee-ing each run to the console and a per-run log file.",
+  "keywords": [
+    "claude",
+    "agent",
+    "batch",
+    "loop",
+    "cli",
+    "prompt"
+  ],
+  "homepage": "https://github.com/kaspernj/promptmill#readme",
+  "bugs": {
+    "url": "https://github.com/kaspernj/promptmill/issues"
+  },
+  "license": "MIT",
+  "author": "kaspernj <kasper@diestoeckels.de>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaspernj/promptmill.git"
+  },
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "promptmill": "./bin/promptmill"
+  },
+  "scripts": {
+    "all-checks": "npm run typecheck && npm run lint && npm test",
+    "lint": "eslint",
+    "release:patch": "release-patch",
+    "test": "node --test test/*.test.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.1",
+    "eslint": "^10.4.0",
+    "eslint-plugin-jsdoc": "^62.9.0",
+    "globals": "^17.6.0",
+    "release-patch": "^1.0.0",
+    "typescript": "^6.0.3"
+  }
+}
