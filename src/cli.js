@@ -21,6 +21,10 @@ Options:
   --max-turns <n>        Max agent turns per run (Claude only; default ${DEFAULTS.maxTurns}, min 1). Env: MAX_TURNS
   --log-dir <path>       Per-run log directory (default per agent, e.g. .claude-runs / .gemini-runs). Env: LOG_DIR
   --command <cmd>        Agent executable to spawn (default: the agent's, e.g. claude / gemini)
+  --model <name>         Model to use (default: the agent's highest — claude opus, gemini pro,
+                         codex gpt-5.5; Antigravity has no model flag)
+  --level <name>         Reasoning level, where separate from the model (default: the agent's
+                         highest — claude/codex xhigh; Gemini/Antigravity have no level)
   --cwd <path>           Working directory (default current directory)
   --output-format <fmt>  Output mode: pretty | text | json | stream-json (default ${DEFAULTS.outputFormat}).
                          pretty streams live, readable progress; stream-json streams raw
@@ -48,6 +52,8 @@ Precedence for runs/max-turns/log-dir: flag > env var > default.
  * @property {string | null} logFilePrefix - Log filename prefix (null = derive from the agent).
  * @property {string | null} label - Console banner label (null = derive from the agent).
  * @property {"pretty" | "text" | "json" | "stream-json"} outputFormat - promptmill output mode.
+ * @property {string | null} model - Model override (null = the agent's default-highest).
+ * @property {string | null} level - Reasoning-level override (null = the agent's default-highest).
  * @property {boolean} prefixOutputLines - Whether to prefix output lines with the run indicator.
  * @property {string[]} passthroughArgs - Arguments after "--".
  */
@@ -70,9 +76,11 @@ export function parseCliOptions(argv, env = process.env) {
     error: null,
     help: false,
     label: null,
+    level: null,
     logDir: env.LOG_DIR || null,
     logFilePrefix: null,
     maxTurnsRaw: env.MAX_TURNS || String(DEFAULTS.maxTurns),
+    model: null,
     outputFormat: DEFAULTS.outputFormat,
     prefixOutputLines: true,
     passthroughArgs: [],
@@ -136,6 +144,10 @@ export function parseCliOptions(argv, env = process.env) {
         options.logFilePrefix = value
       } else if (arg === "--label") {
         options.label = value
+      } else if (arg === "--model") {
+        options.model = value
+      } else if (arg === "--level") {
+        options.level = value
       } else {
         options.error = `Unknown option: ${arg}.`
         return options
@@ -175,6 +187,28 @@ export function resolveMaxTurns(agent, maxTurnsRaw) {
 }
 
 /**
+ * Resolves the model/level CLI args for an agent: the explicit `--model`/`--level`
+ * value, else the agent's default-highest. Each is rendered via the agent's
+ * `modelArg`/`levelArg` and omitted when the agent (or the resolved value) has none.
+ * @param {import("./agents.js").Agent} agent - The selected agent.
+ * @param {{model: string | null, level: string | null}} options - The model/level overrides.
+ * @returns {string[]} - Args to prepend to the agent's passthrough.
+ * @throws {Error} When a flag is set for an agent that does not support it.
+ */
+export function resolveModelLevelArgs(agent, {model, level}) {
+  if (model !== null && !agent.modelArg) throw new Error(`Agent '${agent.name}' does not support --model.`)
+  if (level !== null && !agent.levelArg) throw new Error(`Agent '${agent.name}' does not support --level.`)
+
+  const effectiveModel = model ?? agent.defaultModel ?? null
+  const effectiveLevel = level ?? agent.defaultLevel ?? null
+
+  return [
+    ...(effectiveModel !== null && agent.modelArg ? agent.modelArg(effectiveModel) : []),
+    ...(effectiveLevel !== null && agent.levelArg ? agent.levelArg(effectiveLevel) : [])
+  ]
+}
+
+/**
  * Runs the promptmill CLI.
  * @param {string[]} argv - Full process argv (i.e. `process.argv`).
  * @returns {Promise<number>} - The process exit code.
@@ -199,9 +233,13 @@ export async function runCli(argv) {
   /** @type {number} */
   let maxTurns
 
+  /** @type {string[]} */
+  let modelLevelArgs
+
   try {
     runs = integerOption(options.runsRaw, {fallback: DEFAULTS.runs, minimum: 0, name: "runs"})
     maxTurns = resolveMaxTurns(agent, options.maxTurnsRaw)
+    modelLevelArgs = resolveModelLevelArgs(agent, options)
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
     return 1
@@ -234,7 +272,7 @@ export async function runCli(argv) {
   const outputFormat = options.outputFormat
 
   const result = await runAgentBatch({
-    args: (turns) => agent.buildArgs(turns, outputFormat, passthroughArgs),
+    args: (turns) => agent.buildArgs(turns, outputFormat, [...modelLevelArgs, ...passthroughArgs]),
     command: options.command ?? agent.command,
     createRenderer: outputFormat === "pretty" ? agent.createRenderer : undefined,
     cwd: options.cwd,

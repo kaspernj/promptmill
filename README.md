@@ -31,6 +31,8 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 | `--max-turns <n>` | `80` (min 1) | `MAX_TURNS` | Max agent turns per run (**Claude only** — Gemini has no turn-limit flag) |
 | `--log-dir <path>` | per agent | `LOG_DIR` | Per-run log directory (`.claude-runs` / `.gemini-runs`) |
 | `--command <cmd>` | the agent's | | Agent executable to spawn (`claude` / `gemini`) |
+| `--model <name>` | agent's highest | | Model to use. Defaults to the agent's highest (see below). Antigravity has no model flag. |
+| `--level <name>` | agent's highest | | Reasoning level, where it's separate from the model name. Defaults to the agent's highest. Gemini/Antigravity have no level. |
 | `--cwd <path>` | current dir | | Working directory |
 | `--output-format <fmt>` | `pretty` | | Output mode: `pretty` (live readable progress), `text` (final result only), `json`, or `stream-json` (raw JSON events) |
 | `--log-file-prefix <s>` | per agent | | Per-run log filename prefix |
@@ -39,6 +41,19 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 | `-h`, `--help` | | | Show help |
 
 Precedence for `runs` / `max-turns` / `log-dir`: **flag > env var > default**.
+
+### Model & reasoning level
+
+By default promptmill runs each agent at its **highest** model and reasoning level; override with `--model` / `--level`. (These are the highest at time of writing — they live in the agent registry and may need bumping as new models ship.)
+
+| Agent | default `--model` | default `--level` |
+| --- | --- | --- |
+| claude | `opus` (`--model`) | `xhigh` (`--effort`; scale low/medium/high/xhigh/max) |
+| gemini | `pro` (`-m`) | — (no level flag) |
+| codex | `gpt-5.5` (`-m`) | `xhigh` (`-c model_reasoning_effort=`) |
+| antigravity | — (no model flag) | — (no level flag) |
+
+Passing `--model`/`--level` to an agent that has no such flag (e.g. `--agent antigravity --model …`) is an error.
 
 ### Agents
 

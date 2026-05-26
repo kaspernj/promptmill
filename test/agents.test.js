@@ -102,6 +102,31 @@ test("codex text mode omits --json and passthrough lands before the trailing -",
   assert.deepEqual(withModel.slice(-3), ["-m", "gpt-5.1-codex", "-"]) // passthrough before stdin -
 })
 
+test("agents declare their default-highest model and level (and how to render them)", () => {
+  const claude = getAgent("claude")
+  assert.equal(claude.defaultModel, "opus")
+  assert.equal(claude.defaultLevel, "xhigh")
+  assert.deepEqual(claude.modelArg?.("opus"), ["--model", "opus"])
+  assert.deepEqual(claude.levelArg?.("xhigh"), ["--effort", "xhigh"])
+
+  const gemini = getAgent("gemini")
+  assert.equal(gemini.defaultModel, "pro")
+  assert.deepEqual(gemini.modelArg?.("pro"), ["-m", "pro"])
+  assert.equal(gemini.levelArg, undefined) // Gemini has no separate level
+  assert.equal(gemini.defaultLevel, undefined)
+
+  const codex = getAgent("codex")
+  assert.equal(codex.defaultModel, "gpt-5.5")
+  assert.equal(codex.defaultLevel, "xhigh")
+  assert.deepEqual(codex.modelArg?.("gpt-5.5"), ["-m", "gpt-5.5"])
+  assert.deepEqual(codex.levelArg?.("xhigh"), ["-c", 'model_reasoning_effort="xhigh"'])
+
+  const antigravity = getAgent("antigravity")
+  assert.equal(antigravity.modelArg, undefined) // agy has no model/level flag
+  assert.equal(antigravity.levelArg, undefined)
+  assert.equal(antigravity.defaultModel, undefined)
+})
+
 test("the antigravity agent has Antigravity defaults and no renderer", () => {
   const antigravity = getAgent("antigravity")
 

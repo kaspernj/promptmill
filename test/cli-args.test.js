@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {getAgent} from "../src/agents.js"
-import {parseCliOptions, resolveMaxTurns} from "../src/cli.js"
+import {parseCliOptions, resolveMaxTurns, resolveModelLevelArgs} from "../src/cli.js"
 
 /**
  * @param {string[]} args - CLI args after the program name.
@@ -34,6 +34,33 @@ test("--output-format pretty parses", () => {
 
   assert.equal(options.error, null)
   assert.equal(options.outputFormat, "pretty")
+})
+
+test("--model and --level parse into options (default null)", () => {
+  const defaults = parse(["prompt.md"])
+  assert.equal(defaults.model, null)
+  assert.equal(defaults.level, null)
+
+  const options = parse(["prompt.md", "--model", "sonnet", "--level", "high"])
+  assert.equal(options.error, null)
+  assert.equal(options.model, "sonnet")
+  assert.equal(options.level, "high")
+})
+
+test("resolveModelLevelArgs uses each agent's default-highest model and level", () => {
+  assert.deepEqual(resolveModelLevelArgs(getAgent("claude"), {level: null, model: null}), ["--model", "opus", "--effort", "xhigh"])
+  assert.deepEqual(resolveModelLevelArgs(getAgent("codex"), {level: null, model: null}), ["-m", "gpt-5.5", "-c", 'model_reasoning_effort="xhigh"'])
+  assert.deepEqual(resolveModelLevelArgs(getAgent("gemini"), {level: null, model: null}), ["-m", "pro"]) // no level
+  assert.deepEqual(resolveModelLevelArgs(getAgent("antigravity"), {level: null, model: null}), []) // no model/level
+})
+
+test("resolveModelLevelArgs honors explicit overrides", () => {
+  assert.deepEqual(resolveModelLevelArgs(getAgent("claude"), {level: "high", model: "sonnet"}), ["--model", "sonnet", "--effort", "high"])
+})
+
+test("resolveModelLevelArgs rejects flags an agent does not support", () => {
+  assert.throws(() => resolveModelLevelArgs(getAgent("antigravity"), {level: null, model: "x"}), /does not support --model/)
+  assert.throws(() => resolveModelLevelArgs(getAgent("gemini"), {level: "high", model: null}), /does not support --level/)
 })
 
 test("resolveMaxTurns validates for Claude but ignores the value for Gemini", () => {
