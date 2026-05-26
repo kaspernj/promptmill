@@ -8,7 +8,7 @@
  * @property {string} command - Default agent executable.
  * @property {string} logFilePrefix - Default per-run log filename prefix.
  * @property {string} label - Default console banner label.
- * @property {"text" | "json" | "stream-json"} outputFormat - Default Claude output format.
+ * @property {"pretty" | "text" | "json" | "stream-json"} outputFormat - Default promptmill output mode.
  */
 
 /** @type {PromptmillDefaults} */
@@ -19,28 +19,35 @@ export const DEFAULTS = {
   command: "claude",
   logFilePrefix: "claude-run-",
   label: "Claude",
-  outputFormat: "text"
+  outputFormat: "pretty"
 }
 
-/** Output formats Claude Code accepts for `--output-format`. */
-export const OUTPUT_FORMATS = ["text", "json", "stream-json"]
+/**
+ * promptmill output modes. `pretty` (the default) renders Claude's stream-json
+ * events into live, readable progress; `text` / `json` / `stream-json` pass
+ * Claude's raw output of that format through unchanged.
+ */
+export const OUTPUT_FORMATS = ["pretty", "text", "json", "stream-json"]
 
 /**
  * Builds the default Claude Code CLI arguments for a single autonomous run.
- * `--verbose` is added only for `stream-json`, which Claude requires in print
- * mode; `text` (the default) and `json` are quieter and human-readable.
+ * `pretty` runs Claude in `stream-json` under the hood (promptmill renders the
+ * events); `--verbose` is added whenever the Claude format is `stream-json`,
+ * which Claude requires in print mode. `text` and `json` are passed through.
  * @param {number} maxTurns - Maximum agent turns for the run.
- * @param {"text" | "json" | "stream-json"} [outputFormat] - Claude output format.
+ * @param {"pretty" | "text" | "json" | "stream-json"} [outputFormat] - promptmill output mode.
  * @returns {string[]} - CLI arguments for the agent command.
  */
 export function defaultClaudeArgs(maxTurns, outputFormat = DEFAULTS.outputFormat) {
+  const claudeFormat = outputFormat === "pretty" ? "stream-json" : outputFormat
+
   return [
     "-p",
     "Follow the full instructions provided on stdin. Run autonomously. Do not ask questions. Do not wait for human input.",
     "--dangerously-skip-permissions",
     "--output-format",
-    outputFormat,
-    ...(outputFormat === "stream-json" ? ["--verbose"] : []),
+    claudeFormat,
+    ...(claudeFormat === "stream-json" ? ["--verbose"] : []),
     "--max-turns",
     String(maxTurns)
   ]
