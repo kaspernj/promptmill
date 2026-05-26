@@ -2,7 +2,8 @@
 import fs from "node:fs"
 import path from "node:path"
 
-import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs, ensureStreamJsonVerbose} from "./defaults.js"
+import {AGENT_NAMES, getAgent} from "./agents.js"
+import {DEFAULTS, OUTPUT_FORMATS} from "./defaults.js"
 import {integerOption} from "./helpers.js"
 import {runAgentBatch} from "./run-agent-batch.js"
 import {terminateChild} from "./run-agent-process.js"
@@ -14,16 +15,18 @@ Runs an agent command repeatedly against a prompt file, tee-ing each run to the
 console and a per-run log file.
 
 Options:
+  --agent <name>         Agent to run: ${AGENT_NAMES.join(" | ")} (default ${DEFAULTS.agent}).
+                         Sets the default command, label, and log dir.
   --runs <n>             Number of runs (default ${DEFAULTS.runs}, min 0). Env: RUNS
-  --max-turns <n>        Max agent turns per run (default ${DEFAULTS.maxTurns}, min 1). Env: MAX_TURNS
-  --log-dir <path>       Per-run log directory (default ${DEFAULTS.logDir}). Env: LOG_DIR
-  --command <cmd>        Agent executable to spawn (default ${DEFAULTS.command})
+  --max-turns <n>        Max agent turns per run (Claude only; default ${DEFAULTS.maxTurns}, min 1). Env: MAX_TURNS
+  --log-dir <path>       Per-run log directory (default per agent, e.g. .claude-runs / .gemini-runs). Env: LOG_DIR
+  --command <cmd>        Agent executable to spawn (default: the agent's, e.g. claude / gemini)
   --cwd <path>           Working directory (default current directory)
   --output-format <fmt>  Output mode: pretty | text | json | stream-json (default ${DEFAULTS.outputFormat}).
                          pretty streams live, readable progress; stream-json streams raw
                          JSON events; text prints only each run's final result.
-  --log-file-prefix <s>  Per-run log filename prefix (default ${DEFAULTS.logFilePrefix})
-  --label <s>            Console banner label (default ${DEFAULTS.label})
+  --log-file-prefix <s>  Per-run log filename prefix (default per agent)
+  --label <s>            Console banner label (default: the agent's name)
   --no-line-prefix       Do not prefix each output line with "[run N/total] "
   -h, --help             Show this help
 
@@ -36,13 +39,14 @@ Precedence for runs/max-turns/log-dir: flag > env var > default.
  * @property {boolean} help - Whether help was requested.
  * @property {string | null} error - Parse error message, when invalid.
  * @property {string | null} promptFile - Positional prompt-file path.
+ * @property {string} agent - Selected agent name.
  * @property {string} runsRaw - Raw runs value (flag or env).
  * @property {string} maxTurnsRaw - Raw max-turns value (flag or env).
- * @property {string} logDir - Log directory.
- * @property {string} command - Agent command.
+ * @property {string | null} logDir - Log directory (null = derive from the agent).
+ * @property {string | null} command - Agent command (null = derive from the agent).
  * @property {string} cwd - Working directory.
- * @property {string} logFilePrefix - Log filename prefix.
- * @property {string} label - Console banner label.
+ * @property {string | null} logFilePrefix - Log filename prefix (null = derive from the agent).
+ * @property {string | null} label - Console banner label (null = derive from the agent).
  * @property {"pretty" | "text" | "json" | "stream-json"} outputFormat - promptmill output mode.
  * @property {boolean} prefixOutputLines - Whether to prefix output lines with the run indicator.
  * @property {string[]} passthroughArgs - Arguments after "--".
@@ -60,13 +64,14 @@ export function parseCliOptions(argv, env = process.env) {
 
   /** @type {CliOptions} */
   const options = {
-    command: DEFAULTS.command,
+    agent: DEFAULTS.agent,
+    command: null,
     cwd: process.cwd(),
     error: null,
     help: false,
-    label: DEFAULTS.label,
-    logDir: env.LOG_DIR || DEFAULTS.logDir,
-    logFilePrefix: DEFAULTS.logFilePrefix,
+    label: null,
+    logDir: env.LOG_DIR || null,
+    logFilePrefix: null,
     maxTurnsRaw: env.MAX_TURNS || String(DEFAULTS.maxTurns),
     outputFormat: DEFAULTS.outputFormat,
     prefixOutputLines: true,
@@ -103,7 +108,14 @@ export function parseCliOptions(argv, env = process.env) {
 
       index += 1
 
-      if (arg === "--runs") {
+      if (arg === "--agent") {
+        if (!AGENT_NAMES.includes(value)) {
+          options.error = `Invalid --agent: ${value}. Use ${AGENT_NAMES.join(", ")}.`
+          return options
+        }
+
+        options.agent = value
+      } else if (arg === "--runs") {
         options.runsRaw = value
       } else if (arg === "--max-turns") {
         options.maxTurnsRaw = value
@@ -203,21 +215,22 @@ export async function runCli(argv) {
 
   const passthroughArgs = options.passthroughArgs
   const outputFormat = options.outputFormat
+  const agent = getAgent(options.agent)
 
   const result = await runAgentBatch({
-    args: (turns) => ensureStreamJsonVerbose([...defaultClaudeArgs(turns, outputFormat), ...passthroughArgs]),
-    command: options.command,
+    args: (turns) => agent.buildArgs(turns, outputFormat, passthroughArgs),
+    command: options.command ?? agent.command,
+    createRenderer: outputFormat === "pretty" ? agent.createRenderer : undefined,
     cwd: options.cwd,
-    label: options.label,
-    logDir: options.logDir,
-    logFilePrefix: options.logFilePrefix,
+    label: options.label ?? agent.label,
+    logDir: options.logDir ?? agent.logDir,
+    logFilePrefix: options.logFilePrefix ?? agent.logFilePrefix,
     maxTurns,
     onSpawn: (child) => {
       activeChild = child
     },
     prefixOutputLines: options.prefixOutputLines,
     promptFile,
-    render: outputFormat === "pretty",
     runs,
     shouldStop: stopController.shouldStop
   })

@@ -7,6 +7,7 @@ import {Writable} from "node:stream"
 import test from "node:test"
 import {fileURLToPath} from "node:url"
 
+import {createClaudeStreamRenderer} from "../src/render-claude-stream.js"
 import {runAgentBatch} from "../src/run-agent-batch.js"
 
 const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures")
@@ -165,10 +166,10 @@ test("pretty render mode prints readable lines from Claude stream-json", async (
     args: [fixture("stream-json.js")],
     command: process.execPath,
     cwd: root,
+    createRenderer: createClaudeStreamRenderer,
     logDir,
     logger: silentLogger,
     promptFile,
-    render: true,
     runs: 1,
     stderr: captured.stream,
     stdout: captured.stream

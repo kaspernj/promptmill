@@ -20,10 +20,12 @@ test("defaults are applied for a bare prompt file", () => {
   assert.equal(options.promptFile, "prompt.md")
   assert.equal(options.runsRaw, "100")
   assert.equal(options.maxTurnsRaw, "80")
-  assert.equal(options.logDir, ".claude-runs")
-  assert.equal(options.command, "claude")
+  assert.equal(options.agent, "claude")
   assert.equal(options.outputFormat, "pretty")
   assert.equal(options.prefixOutputLines, true)
+  // command/label/logDir/logFilePrefix are null until resolved from the agent in runCli.
+  assert.equal(options.command, null)
+  assert.equal(options.logDir, null)
 })
 
 test("--output-format pretty parses", () => {
@@ -31,6 +33,25 @@ test("--output-format pretty parses", () => {
 
   assert.equal(options.error, null)
   assert.equal(options.outputFormat, "pretty")
+})
+
+test("--agent gemini parses", () => {
+  const options = parse(["prompt.md", "--agent", "gemini"])
+
+  assert.equal(options.error, null)
+  assert.equal(options.agent, "gemini")
+})
+
+test("an invalid --agent is flagged without throwing", () => {
+  const options = parse(["prompt.md", "--agent", "bard"])
+
+  assert.match(String(options.error), /Invalid --agent: bard\./)
+})
+
+test("an explicit --log-dir overrides the agent default", () => {
+  const options = parse(["prompt.md", "--agent", "gemini", "--log-dir", ".custom"])
+
+  assert.equal(options.logDir, ".custom")
 })
 
 test("--no-line-prefix disables the per-line run prefix", () => {
