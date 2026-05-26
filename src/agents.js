@@ -13,6 +13,10 @@ import {createGeminiStreamRenderer} from "./render-gemini-stream.js"
  * @property {string} logFilePrefix - Default per-run log filename prefix.
  * @property {boolean} usesMaxTurns - Whether the agent honors a per-run turn limit (`--max-turns`).
  * @property {boolean} [textProgressOnStderr] - Whether the agent's `text` mode streams progress to stderr (only the final result on stdout). When set, promptmill keeps stderr off the live console in `text` mode to preserve the "final result only" contract.
+ * @property {string} [defaultModel] - Highest-capability model used by default (omit if the agent has no model flag).
+ * @property {string} [defaultLevel] - Highest reasoning level used by default (omit if the agent has no separate level setting).
+ * @property {(model: string) => string[]} [modelArg] - Renders a model selection into CLI args (omit if the agent has no model flag).
+ * @property {(level: string) => string[]} [levelArg] - Renders a reasoning level into CLI args (omit if the agent has no level setting).
  * @property {(maxTurns: number, outputFormat: "pretty" | "text" | "json" | "stream-json", passthroughArgs: string[]) => string[]} buildArgs - Builds the agent's CLI args.
  * @property {(prefix: string, sinks: import("node:stream").Writable[]) => {write: (chunk: Buffer | string) => void, flush: () => void}} [createRenderer] - Live `pretty` stream renderer; omit for agents with no JSON event stream (raw text passthrough).
  */
@@ -25,6 +29,10 @@ const claude = {
   logDir: ".claude-runs",
   logFilePrefix: "claude-run-",
   usesMaxTurns: true,
+  defaultModel: "opus",
+  defaultLevel: "xhigh",
+  modelArg: (model) => ["--model", model],
+  levelArg: (level) => ["--effort", level],
   buildArgs: (maxTurns, outputFormat, passthroughArgs) =>
     ensureStreamJsonVerbose([...defaultClaudeArgs(maxTurns, outputFormat), ...passthroughArgs]),
   createRenderer: createClaudeStreamRenderer
@@ -38,6 +46,8 @@ const gemini = {
   logDir: ".gemini-runs",
   logFilePrefix: "gemini-run-",
   usesMaxTurns: false,
+  defaultModel: "pro", // highest alias (resolves to gemini-3-pro-preview / gemini-2.5-pro); Gemini has no separate level flag
+  modelArg: (model) => ["-m", model],
   // Gemini reads the prompt from stdin (no -p) and has no turn-limit CLI flag.
   buildArgs: (_maxTurns, outputFormat, passthroughArgs) => [...defaultGeminiArgs(outputFormat), ...passthroughArgs],
   createRenderer: createGeminiStreamRenderer
@@ -51,6 +61,10 @@ const codex = {
   logDir: ".codex-runs",
   logFilePrefix: "codex-run-",
   usesMaxTurns: false,
+  defaultModel: "gpt-5.5",
+  defaultLevel: "xhigh",
+  modelArg: (model) => ["-m", model],
+  levelArg: (level) => ["-c", `model_reasoning_effort="${level}"`],
   // `codex exec` text mode streams progress to stderr; only the final message
   // is on stdout, so keep stderr off the live console to stay "final result only".
   textProgressOnStderr: true,
