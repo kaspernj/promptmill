@@ -191,8 +191,8 @@ export async function runCli(argv) {
   // First Ctrl+C → graceful stop (finish the current run, skip the next).
   // Second Ctrl+C (or any SIGTERM) → interrupt the current run and exit now.
   const stopController = createStopController({
-    onInterrupt: () => {
-      terminateChild(activeChild)
+    onInterrupt: (signal) => {
+      terminateChild(activeChild, signal)
       process.exit(130)
     },
     stdout: process.stdout

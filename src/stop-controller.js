@@ -15,7 +15,7 @@
  * SIGINT — or any SIGTERM — runs `onInterrupt` to stop immediately.
  * @param {object} options - Controller options.
  * @param {import("node:stream").Writable} options.stdout - Sink for the confirmation messages.
- * @param {() => void} options.onInterrupt - Interrupts the active run and exits now.
+ * @param {(signal: "SIGINT" | "SIGTERM") => void} options.onInterrupt - Interrupts the active run (forwarding the received signal) and exits now.
  * @returns {StopController} - The stop controller.
  */
 export function createStopController({stdout, onInterrupt}) {
@@ -26,7 +26,7 @@ export function createStopController({stdout, onInterrupt}) {
     shouldStop: () => stopRequested,
     handleSignal(signal) {
       if (signal === "SIGTERM") {
-        onInterrupt()
+        onInterrupt(signal)
 
         return
       }
@@ -38,7 +38,7 @@ export function createStopController({stdout, onInterrupt}) {
         stdout.write("\n\n⚠ Graceful stop: the current run will finish, then promptmill exits without starting the next run. Press Ctrl+C again to interrupt now.\n")
       } else {
         stdout.write("\nInterrupting the current run…\n")
-        onInterrupt()
+        onInterrupt(signal)
       }
     }
   }
