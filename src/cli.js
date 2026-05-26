@@ -2,7 +2,7 @@
 import fs from "node:fs"
 import path from "node:path"
 
-import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs} from "./defaults.js"
+import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs, ensureStreamJsonVerbose} from "./defaults.js"
 import {integerOption} from "./helpers.js"
 import {runAgentBatch} from "./run-agent-batch.js"
 
@@ -205,7 +205,7 @@ export async function runCli(argv) {
   const outputFormat = options.outputFormat
 
   await runAgentBatch({
-    args: (turns) => [...defaultClaudeArgs(turns, outputFormat), ...passthroughArgs],
+    args: (turns) => ensureStreamJsonVerbose([...defaultClaudeArgs(turns, outputFormat), ...passthroughArgs]),
     command: options.command,
     cwd: options.cwd,
     label: options.label,

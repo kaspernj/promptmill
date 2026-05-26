@@ -45,3 +45,24 @@ export function defaultClaudeArgs(maxTurns, outputFormat = DEFAULTS.outputFormat
     String(maxTurns)
   ]
 }
+
+/**
+ * Enforces Claude's invariant that `--output-format stream-json` requires
+ * `--verbose` in print mode, regardless of how the format got onto the command
+ * line. The effective format is the last `--output-format` value (matching
+ * Claude's own last-wins precedence), so this also covers a stream-json format
+ * supplied via trailing passthrough args that overrides the promptmill default.
+ * @param {string[]} args - The fully-assembled agent args.
+ * @returns {string[]} - The args, with `--verbose` appended when required.
+ */
+export function ensureStreamJsonVerbose(args) {
+  let effectiveFormat = null
+
+  for (let i = 0; i < args.length - 1; i += 1) {
+    if (args[i] === "--output-format") effectiveFormat = args[i + 1]
+  }
+
+  if (effectiveFormat === "stream-json" && !args.includes("--verbose")) return [...args, "--verbose"]
+
+  return args
+}
