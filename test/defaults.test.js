@@ -15,17 +15,31 @@ function valueAfter(args, flag) {
   return index === -1 ? undefined : args[index + 1]
 }
 
-test("the default output format is human-readable text", () => {
-  assert.equal(DEFAULTS.outputFormat, "text")
-  assert.deepEqual(OUTPUT_FORMATS, ["text", "json", "stream-json"])
+test("the default output mode is pretty", () => {
+  assert.equal(DEFAULTS.outputFormat, "pretty")
+  assert.deepEqual(OUTPUT_FORMATS, ["pretty", "text", "json", "stream-json"])
 })
 
-test("defaultClaudeArgs defaults to text output, without --verbose", () => {
+test("defaultClaudeArgs defaults to pretty, which runs Claude in stream-json with --verbose", () => {
   const args = defaultClaudeArgs(80)
+
+  assert.equal(valueAfter(args, "--output-format"), "stream-json")
+  assert.ok(args.includes("--verbose"))
+  assert.equal(valueAfter(args, "--max-turns"), "80")
+})
+
+test("explicit pretty maps to stream-json with --verbose", () => {
+  const args = defaultClaudeArgs(80, "pretty")
+
+  assert.equal(valueAfter(args, "--output-format"), "stream-json")
+  assert.ok(args.includes("--verbose"))
+})
+
+test("explicit text output runs Claude in text without --verbose", () => {
+  const args = defaultClaudeArgs(80, "text")
 
   assert.equal(valueAfter(args, "--output-format"), "text")
   assert.ok(!args.includes("--verbose"))
-  assert.equal(valueAfter(args, "--max-turns"), "80")
 })
 
 test("stream-json adds --verbose (claude requires it in print mode)", () => {
@@ -49,9 +63,10 @@ test("ensureStreamJsonVerbose leaves a text default untouched", () => {
 })
 
 test("ensureStreamJsonVerbose adds --verbose when passthrough overrides to stream-json", () => {
-  // Mirrors `promptmill ... -- --output-format stream-json`: the text default
-  // is overridden at the end of argv, but --verbose was not carried along.
-  const args = [...defaultClaudeArgs(80), "--output-format", "stream-json"]
+  // Mirrors `promptmill --output-format text ... -- --output-format stream-json`:
+  // a non-verbose base is overridden at the end of argv, but --verbose was not
+  // carried along.
+  const args = [...defaultClaudeArgs(80, "text"), "--output-format", "stream-json"]
 
   assert.ok(!args.includes("--verbose")) // precondition: the broken shape
   assert.ok(ensureStreamJsonVerbose(args).includes("--verbose"))

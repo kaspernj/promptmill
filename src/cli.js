@@ -17,8 +17,9 @@ Options:
   --log-dir <path>       Per-run log directory (default ${DEFAULTS.logDir}). Env: LOG_DIR
   --command <cmd>        Agent executable to spawn (default ${DEFAULTS.command})
   --cwd <path>           Working directory (default current directory)
-  --output-format <fmt>  Claude output: text | json | stream-json (default ${DEFAULTS.outputFormat}).
-                         text is human-readable; stream-json streams raw JSON events.
+  --output-format <fmt>  Output mode: pretty | text | json | stream-json (default ${DEFAULTS.outputFormat}).
+                         pretty streams live, readable progress; stream-json streams raw
+                         JSON events; text prints only each run's final result.
   --log-file-prefix <s>  Per-run log filename prefix (default ${DEFAULTS.logFilePrefix})
   --label <s>            Console banner label (default ${DEFAULTS.label})
   --no-line-prefix       Do not prefix each output line with "[run N/total] "
@@ -40,7 +41,7 @@ Precedence for runs/max-turns/log-dir: flag > env var > default.
  * @property {string} cwd - Working directory.
  * @property {string} logFilePrefix - Log filename prefix.
  * @property {string} label - Console banner label.
- * @property {"text" | "json" | "stream-json"} outputFormat - Claude output format.
+ * @property {"pretty" | "text" | "json" | "stream-json"} outputFormat - promptmill output mode.
  * @property {boolean} prefixOutputLines - Whether to prefix output lines with the run indicator.
  * @property {string[]} passthroughArgs - Arguments after "--".
  */
@@ -116,7 +117,7 @@ export function parseCliOptions(argv, env = process.env) {
           return options
         }
 
-        options.outputFormat = /** @type {"text" | "json" | "stream-json"} */ (value)
+        options.outputFormat = /** @type {"pretty" | "text" | "json" | "stream-json"} */ (value)
       } else if (arg === "--log-file-prefix") {
         options.logFilePrefix = value
       } else if (arg === "--label") {
@@ -217,6 +218,7 @@ export async function runCli(argv) {
     },
     prefixOutputLines: options.prefixOutputLines,
     promptFile,
+    render: outputFormat === "pretty",
     runs
   })
 

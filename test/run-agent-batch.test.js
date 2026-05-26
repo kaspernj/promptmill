@@ -125,6 +125,34 @@ test("omits the run prefix when prefixOutputLines is false", async () => {
   assert.doesNotMatch(output, /\[run /)
 })
 
+test("pretty render mode prints readable lines from Claude stream-json", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const promptFile = path.join(root, "prompt.md")
+  await fs.writeFile(promptFile, "ignored")
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+
+  await runAgentBatch({
+    args: [fixture("stream-json.js")],
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    promptFile,
+    render: true,
+    runs: 1,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  const output = captured.text()
+
+  assert.match(output, /\[run 1\/1\] · session started \(claude-test\)/)
+  assert.match(output, /\[run 1\/1\] → Bash: echo hi/)
+  assert.match(output, /\[run 1\/1\] ✓ done \(2 turns, \$0\.01, 2s\)/)
+  assert.doesNotMatch(output, /"type":"assistant"/) // raw JSON is rendered away, not printed
+})
+
 test("continues after a non-zero run and counts failures", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const promptFile = path.join(root, "prompt.md")

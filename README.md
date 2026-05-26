@@ -31,7 +31,7 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 | `--log-dir <path>` | `.claude-runs` | `LOG_DIR` | Per-run log directory |
 | `--command <cmd>` | `claude` | | Agent executable to spawn |
 | `--cwd <path>` | current dir | | Working directory |
-| `--output-format <fmt>` | `text` | | Claude output: `text` (human-readable), `json`, or `stream-json` (live raw JSON events) |
+| `--output-format <fmt>` | `pretty` | | Output mode: `pretty` (live readable progress), `text` (final result only), `json`, or `stream-json` (raw JSON events) |
 | `--log-file-prefix <s>` | `claude-run-` | | Per-run log filename prefix |
 | `--label <s>` | `Claude` | | Console banner label |
 | `--no-line-prefix` | (prefix on) | | Don't prefix each output line with `[run N/total] ` |
@@ -43,12 +43,27 @@ Exit codes: `0` all runs finished · `1` fatal (missing prompt file, invalid `ru
 
 ## Output
 
-By default promptmill runs `claude` with `--dangerously-skip-permissions --output-format text --max-turns <n>`, so each run prints Claude's human-readable result. To see the live raw JSON event stream instead, use `--output-format stream-json` (promptmill adds the `--verbose` Claude requires for it); `--output-format json` prints a single JSON result object per run.
+By default (`pretty`) promptmill runs `claude` in `stream-json` under the hood and renders the events into **live, readable progress** — assistant messages, tool calls (`→ Bash: …`, `→ Read: …`), errors, and a final `✓ done (N turns, $cost, time)` summary — so you can watch a long run as it works:
+
+```
+[run 1/30] · session started (claude-opus-4-7)
+[run 1/30] Reading the repo conventions first.
+[run 1/30] → Bash: git rev-parse --abbrev-ref HEAD
+[run 1/30] → Read: AGENTS.md
+[run 1/30] → Edit: app/auth/session.rb
+[run 1/30] ✓ done (14 turns, $0.42, 3m12s)
+```
+
+The other modes pass Claude's raw output of that format through unchanged:
 
 ```sh
-promptmill prompts/my-prompt.md                          # readable text (default)
-promptmill prompts/my-prompt.md --output-format stream-json   # live JSON events
+promptmill prompts/my-prompt.md                              # pretty: live readable progress (default)
+promptmill prompts/my-prompt.md --output-format stream-json  # raw JSON events (full fidelity for logs/parsing)
+promptmill prompts/my-prompt.md --output-format text         # only each run's final result (non-streaming — silent until the run ends)
+promptmill prompts/my-prompt.md --output-format json         # a single JSON result object per run
 ```
+
+> `pretty` assumes Claude's `stream-json` event schema. For a different `--command`, use `stream-json`/`text`/`json` (or `pretty` will simply pass any non-JSON lines through unchanged).
 
 Every output line is prefixed with the run it belongs to, e.g. `[run 3/20] …`, so you always know where you are in the batch. Pass `--no-line-prefix` for unprefixed output (e.g. when piping `--output-format stream-json` to a JSON parser).
 

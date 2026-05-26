@@ -1,6 +1,8 @@
 // @ts-check
 import {spawn} from "node:child_process"
 
+import {createClaudeStreamRenderer} from "./render-claude-stream.js"
+
 /**
  * @typedef {object} AgentRunStatus
  * @property {number} code - Exit code (1 when the process errored or was signaled).
@@ -67,10 +69,11 @@ function createLinePrefixer(prefix, sinks) {
  * @param {import("node:stream").Writable} args.stderr - Live stderr sink.
  * @param {import("node:stream").Writable} args.logStream - Per-run log sink.
  * @param {string} [args.linePrefix] - Prepended to each output line; empty string passes output through unchanged.
+ * @param {boolean} [args.render] - Render Claude stream-json stdout into readable lines (the `pretty` mode).
  * @param {(child: import("node:child_process").ChildProcess) => void} [args.onSpawn] - Receives the spawned child.
  * @returns {Promise<AgentRunStatus>} - Resolves with the run status.
  */
-export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", onSpawn}) {
+export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", render = false, onSpawn}) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {cwd, stdio: ["pipe", "pipe", "pipe"]})
 
@@ -78,12 +81,14 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
       onSpawn(child)
     }
 
-    const outPrefixer = linePrefix ? createLinePrefixer(linePrefix, [stdout, logStream]) : null
+    const outWriter = render
+      ? createClaudeStreamRenderer(linePrefix, [stdout, logStream])
+      : (linePrefix ? createLinePrefixer(linePrefix, [stdout, logStream]) : null)
     const errPrefixer = linePrefix ? createLinePrefixer(linePrefix, [stderr, logStream]) : null
 
     child.stdout?.on("data", (chunk) => {
-      if (outPrefixer) {
-        outPrefixer.write(chunk)
+      if (outWriter) {
+        outWriter.write(chunk)
       } else {
         stdout.write(chunk)
         logStream.write(chunk)
@@ -104,7 +109,7 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
 
     /** @returns {void} */
     function flushPrefixers() {
-      outPrefixer?.flush()
+      outWriter?.flush()
       errPrefixer?.flush()
     }
 

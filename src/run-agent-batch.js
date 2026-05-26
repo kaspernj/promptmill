@@ -33,6 +33,7 @@ import {spawnAgentRun} from "./run-agent-process.js"
  * @property {string} [logFilePrefix] - Per-run log filename prefix.
  * @property {string} [label] - Console banner label.
  * @property {boolean} [prefixOutputLines] - Prefix each agent output line with `[run N/total] ` (default true).
+ * @property {boolean} [render] - Render Claude stream-json output into readable lines (the `pretty` mode, default false).
  * @property {import("node:stream").Writable} [stdout] - Live stdout sink.
  * @property {import("node:stream").Writable} [stderr] - Live stderr sink.
  * @property {{log: (message: string) => void}} [logger] - Banner sink.
@@ -58,6 +59,7 @@ export async function runAgentBatch(options) {
     logFilePrefix = "claude-run-",
     label = "Claude",
     prefixOutputLines = true,
+    render = false,
     stdout = process.stdout,
     stderr = process.stderr,
     logger = console,
@@ -94,6 +96,7 @@ export async function runAgentBatch(options) {
       logStream,
       onSpawn,
       prompt,
+      render,
       stderr,
       stdout
     })
