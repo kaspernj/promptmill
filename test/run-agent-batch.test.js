@@ -58,6 +58,7 @@ test("runs the command N times and writes one prompt-bearing log per run", async
 
   assert.equal(result.runs, 2)
   assert.equal(result.failures, 0)
+  assert.equal(result.stopped, false)
 
   const logFiles = (await fs.readdir(logDir)).sort()
 
@@ -123,6 +124,34 @@ test("omits the run prefix when prefixOutputLines is false", async () => {
 
   assert.match(output, /alpha\nbeta\npartial/)
   assert.doesNotMatch(output, /\[run /)
+})
+
+test("stops before starting the next run when shouldStop becomes true", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const promptFile = path.join(root, "prompt.md")
+  await fs.writeFile(promptFile, "ignored")
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+
+  let spawned = 0
+  const result = await runAgentBatch({
+    args: [fixture("echo-stdin.js")],
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    onSpawn: () => {spawned += 1},
+    promptFile,
+    runs: 3,
+    shouldStop: () => spawned >= 1, // request a stop once the first run has started
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  assert.equal(result.stopped, true)
+  assert.equal(result.results.length, 1) // only the first run executed; runs 2 and 3 were skipped
+  assert.equal(result.runs, 3)
+  assert.equal((await fs.readdir(logDir)).length, 1)
 })
 
 test("pretty render mode prints readable lines from Claude stream-json", async () => {

@@ -5,6 +5,8 @@ import path from "node:path"
 import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs, ensureStreamJsonVerbose} from "./defaults.js"
 import {integerOption} from "./helpers.js"
 import {runAgentBatch} from "./run-agent-batch.js"
+import {terminateChild} from "./run-agent-process.js"
+import {createStopController} from "./stop-controller.js"
 
 const HELP_TEXT = `Usage: promptmill <prompt-file> [options] [-- <agent args...>]
 
@@ -186,26 +188,23 @@ export async function runCli(argv) {
   /** @type {import("node:child_process").ChildProcess | null} */
   let activeChild = null
 
-  /**
-   * @param {"SIGINT" | "SIGTERM"} signal - Terminating signal.
-   * @returns {void}
-   */
-  function abort(signal) {
-    if (activeChild) {
-      activeChild.kill(signal)
-    }
+  // First Ctrl+C → graceful stop (finish the current run, skip the next).
+  // Second Ctrl+C (or any SIGTERM) → interrupt the current run and exit now.
+  const stopController = createStopController({
+    onInterrupt: (signal) => {
+      terminateChild(activeChild, signal)
+      process.exit(130)
+    },
+    stdout: process.stdout
+  })
 
-    process.stdout.write("\nAborted by user.\n")
-    process.exit(130)
-  }
-
-  process.on("SIGINT", abort)
-  process.on("SIGTERM", abort)
+  process.on("SIGINT", () => stopController.handleSignal("SIGINT"))
+  process.on("SIGTERM", () => stopController.handleSignal("SIGTERM"))
 
   const passthroughArgs = options.passthroughArgs
   const outputFormat = options.outputFormat
 
-  await runAgentBatch({
+  const result = await runAgentBatch({
     args: (turns) => ensureStreamJsonVerbose([...defaultClaudeArgs(turns, outputFormat), ...passthroughArgs]),
     command: options.command,
     cwd: options.cwd,
@@ -219,8 +218,15 @@ export async function runCli(argv) {
     prefixOutputLines: options.prefixOutputLines,
     promptFile,
     render: outputFormat === "pretty",
-    runs
+    runs,
+    shouldStop: stopController.shouldStop
   })
+
+  if (result.stopped) {
+    process.stdout.write(`\nStopped gracefully after ${result.results.length} of ${runs} run(s).\n`)
+
+    return 130
+  }
 
   process.stdout.write("\nAll requested runs finished.\n")
 
