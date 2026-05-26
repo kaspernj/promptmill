@@ -22,6 +22,20 @@ test("defaults are applied for a bare prompt file", () => {
   assert.equal(options.maxTurnsRaw, "80")
   assert.equal(options.logDir, ".claude-runs")
   assert.equal(options.command, "claude")
+  assert.equal(options.outputFormat, "text")
+})
+
+test("--output-format parses a valid value", () => {
+  const options = parse(["prompt.md", "--output-format", "stream-json"])
+
+  assert.equal(options.error, null)
+  assert.equal(options.outputFormat, "stream-json")
+})
+
+test("an invalid --output-format is flagged without throwing", () => {
+  const options = parse(["prompt.md", "--output-format", "bogus"])
+
+  assert.match(String(options.error), /Invalid --output-format: bogus\./)
 })
 
 test("an explicit flag wins over an env var and the default", () => {

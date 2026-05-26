@@ -2,7 +2,7 @@
 import fs from "node:fs"
 import path from "node:path"
 
-import {DEFAULTS, defaultClaudeArgs} from "./defaults.js"
+import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs} from "./defaults.js"
 import {integerOption} from "./helpers.js"
 import {runAgentBatch} from "./run-agent-batch.js"
 
@@ -17,6 +17,8 @@ Options:
   --log-dir <path>       Per-run log directory (default ${DEFAULTS.logDir}). Env: LOG_DIR
   --command <cmd>        Agent executable to spawn (default ${DEFAULTS.command})
   --cwd <path>           Working directory (default current directory)
+  --output-format <fmt>  Claude output: text | json | stream-json (default ${DEFAULTS.outputFormat}).
+                         text is human-readable; stream-json streams raw JSON events.
   --log-file-prefix <s>  Per-run log filename prefix (default ${DEFAULTS.logFilePrefix})
   --label <s>            Console banner label (default ${DEFAULTS.label})
   -h, --help             Show this help
@@ -37,6 +39,7 @@ Precedence for runs/max-turns/log-dir: flag > env var > default.
  * @property {string} cwd - Working directory.
  * @property {string} logFilePrefix - Log filename prefix.
  * @property {string} label - Console banner label.
+ * @property {"text" | "json" | "stream-json"} outputFormat - Claude output format.
  * @property {string[]} passthroughArgs - Arguments after "--".
  */
 
@@ -60,6 +63,7 @@ export function parseCliOptions(argv, env = process.env) {
     logDir: env.LOG_DIR || DEFAULTS.logDir,
     logFilePrefix: DEFAULTS.logFilePrefix,
     maxTurnsRaw: env.MAX_TURNS || String(DEFAULTS.maxTurns),
+    outputFormat: DEFAULTS.outputFormat,
     passthroughArgs: [],
     promptFile: null,
     runsRaw: env.RUNS || String(DEFAULTS.runs)
@@ -98,6 +102,13 @@ export function parseCliOptions(argv, env = process.env) {
         options.command = value
       } else if (arg === "--cwd") {
         options.cwd = path.resolve(value)
+      } else if (arg === "--output-format") {
+        if (!OUTPUT_FORMATS.includes(value)) {
+          options.error = `Invalid --output-format: ${value}. Use ${OUTPUT_FORMATS.join(", ")}.`
+          return options
+        }
+
+        options.outputFormat = /** @type {"text" | "json" | "stream-json"} */ (value)
       } else if (arg === "--log-file-prefix") {
         options.logFilePrefix = value
       } else if (arg === "--label") {
@@ -183,11 +194,10 @@ export async function runCli(argv) {
   process.on("SIGTERM", abort)
 
   const passthroughArgs = options.passthroughArgs
+  const outputFormat = options.outputFormat
 
   await runAgentBatch({
-    args: passthroughArgs.length > 0
-      ? (turns) => [...defaultClaudeArgs(turns), ...passthroughArgs]
-      : undefined,
+    args: (turns) => [...defaultClaudeArgs(turns, outputFormat), ...passthroughArgs],
     command: options.command,
     cwd: options.cwd,
     label: options.label,

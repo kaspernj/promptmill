@@ -31,6 +31,7 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 | `--log-dir <path>` | `.claude-runs` | `LOG_DIR` | Per-run log directory |
 | `--command <cmd>` | `claude` | | Agent executable to spawn |
 | `--cwd <path>` | current dir | | Working directory |
+| `--output-format <fmt>` | `text` | | Claude output: `text` (human-readable), `json`, or `stream-json` (live raw JSON events) |
 | `--log-file-prefix <s>` | `claude-run-` | | Per-run log filename prefix |
 | `--label <s>` | `Claude` | | Console banner label |
 | `-h`, `--help` | | | Show help |
@@ -39,9 +40,18 @@ Precedence for `runs` / `max-turns` / `log-dir`: **flag > env var > default**.
 
 Exit codes: `0` all runs finished · `1` fatal (missing prompt file, invalid `runs`/`max-turns`, or an unexpected error) · `130` aborted with Ctrl-C (SIGINT/SIGTERM). A run that exits non-zero does **not** fail the batch.
 
+## Output
+
+By default promptmill runs `claude` with `--dangerously-skip-permissions --output-format text --max-turns <n>`, so each run prints Claude's human-readable result. To see the live raw JSON event stream instead, use `--output-format stream-json` (promptmill adds the `--verbose` Claude requires for it); `--output-format json` prints a single JSON result object per run.
+
+```sh
+promptmill prompts/my-prompt.md                          # readable text (default)
+promptmill prompts/my-prompt.md --output-format stream-json   # live JSON events
+```
+
 ## Use a different agent
 
-By default promptmill runs `claude` with `--dangerously-skip-permissions --output-format stream-json --verbose --max-turns <n>`. Point it at another agent CLI and pass extra args after `--` (appended to the default args):
+Point promptmill at another agent CLI with `--command`, and pass extra args after `--` (appended to the default args):
 
 ```sh
 promptmill prompts/my-prompt.md --command codex -- --some-flag value
