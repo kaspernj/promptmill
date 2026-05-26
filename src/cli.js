@@ -252,6 +252,16 @@ export async function runCli(argv) {
     return 1
   }
 
+  const effectiveModel = options.model ?? agent.defaultModel ?? null
+  const effectiveLevel = options.level ?? agent.defaultLevel ?? null
+
+  if (effectiveModel) {
+    process.stdout.write(`Model: ${effectiveModel}\n`)
+  }
+  if (effectiveLevel) {
+    process.stdout.write(`Level: ${effectiveLevel}\n`)
+  }
+
   /** @type {import("node:child_process").ChildProcess | null} */
   let activeChild = null
 
