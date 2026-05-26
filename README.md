@@ -39,7 +39,9 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 
 Precedence for `runs` / `max-turns` / `log-dir`: **flag > env var > default**.
 
-Exit codes: `0` all runs finished · `1` fatal (missing prompt file, invalid `runs`/`max-turns`, or an unexpected error) · `130` aborted with Ctrl-C (SIGINT/SIGTERM). A run that exits non-zero does **not** fail the batch.
+**Stopping:** press Ctrl+C once for a **graceful stop** — the current run finishes, the next one is skipped, and promptmill exits. Press Ctrl+C **again** to interrupt the current run and exit immediately.
+
+Exit codes: `0` all runs finished · `1` fatal (missing prompt file, invalid `runs`/`max-turns`, or an unexpected error) · `130` stopped with Ctrl-C (SIGINT/SIGTERM), gracefully or interrupted. A run that exits non-zero does **not** fail the batch.
 
 ## Output
 

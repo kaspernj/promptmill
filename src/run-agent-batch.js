@@ -16,9 +16,10 @@ import {spawnAgentRun} from "./run-agent-process.js"
 
 /**
  * @typedef {object} AgentBatchResult
- * @property {number} runs - Number of runs performed.
+ * @property {number} runs - Configured number of runs.
  * @property {number} failures - Number of runs that exited non-zero.
- * @property {AgentRunResult[]} results - Per-run results.
+ * @property {AgentRunResult[]} results - Per-run results (length is the number actually run).
+ * @property {boolean} stopped - Whether the batch stopped early because `shouldStop` returned true.
  */
 
 /**
@@ -37,6 +38,7 @@ import {spawnAgentRun} from "./run-agent-process.js"
  * @property {import("node:stream").Writable} [stdout] - Live stdout sink.
  * @property {import("node:stream").Writable} [stderr] - Live stderr sink.
  * @property {{log: (message: string) => void}} [logger] - Banner sink.
+ * @property {() => boolean} [shouldStop] - Checked before each run; when true, the batch stops without starting another run.
  * @property {(child: import("node:child_process").ChildProcess) => void} [onSpawn] - Receives each spawned child.
  */
 
@@ -63,6 +65,7 @@ export async function runAgentBatch(options) {
     stdout = process.stdout,
     stderr = process.stderr,
     logger = console,
+    shouldStop = () => false,
     onSpawn
   } = options
 
@@ -77,8 +80,14 @@ export async function runAgentBatch(options) {
   /** @type {AgentRunResult[]} */
   const results = []
   let failures = 0
+  let stopped = false
 
   for (let runNumber = 1; runNumber <= runs; runNumber += 1) {
+    if (shouldStop()) {
+      stopped = true
+      break
+    }
+
     const timestamp = timestampForLogFile()
     const logFile = path.join(resolvedLogDir, buildLogFileName({logFilePrefix, runNumber, timestamp}))
     const logFileDisplay = path.relative(cwd, logFile)
@@ -113,7 +122,7 @@ export async function runAgentBatch(options) {
     results.push({code: status.code, logFile, runNumber, signal: status.signal})
   }
 
-  return {failures, results, runs}
+  return {failures, results, runs, stopped}
 }
 
 /**

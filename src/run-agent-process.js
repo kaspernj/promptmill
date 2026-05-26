@@ -75,7 +75,10 @@ function createLinePrefixer(prefix, sinks) {
  */
 export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", render = false, onSpawn}) {
   return new Promise((resolve) => {
-    const child = spawn(command, args, {cwd, stdio: ["pipe", "pipe", "pipe"]})
+    // `detached` puts the child in its own process group, so a terminal Ctrl+C
+    // (SIGINT to the foreground group) does not reach it — promptmill decides
+    // whether to forward it. Not unref'd: we still await the child's `close`.
+    const child = spawn(command, args, {cwd, detached: true, stdio: ["pipe", "pipe", "pipe"]})
 
     if (onSpawn) {
       onSpawn(child)
@@ -129,4 +132,27 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
       }
     })
   })
+}
+
+/**
+ * Terminates a spawned child and its process group. The child is spawned
+ * `detached`, so it leads its own group; killing the negative pid signals the
+ * whole group (reaching subprocesses the agent itself spawned). Falls back to
+ * a direct kill, and is a no-op for a missing or already-exited child.
+ * @param {import("node:child_process").ChildProcess | null} child - The child to terminate.
+ * @param {"SIGINT" | "SIGTERM" | "SIGKILL"} [signal] - Signal to send (default SIGTERM).
+ * @returns {void}
+ */
+export function terminateChild(child, signal = "SIGTERM") {
+  if (!child || child.pid === undefined) return
+
+  try {
+    process.kill(-child.pid, signal)
+  } catch {
+    try {
+      child.kill(signal)
+    } catch {
+      // Child already exited — nothing to terminate.
+    }
+  }
 }
