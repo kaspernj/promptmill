@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs, defaultCodexArgs, defaultGeminiArgs, ensureStreamJsonVerbose} from "../src/defaults.js"
+import {DEFAULTS, OUTPUT_FORMATS, defaultAntigravityArgs, defaultClaudeArgs, defaultCodexArgs, defaultGeminiArgs, ensureStreamJsonVerbose} from "../src/defaults.js"
 
 /**
  * @param {string[]} args - Assembled CLI args.
@@ -89,6 +89,18 @@ test("defaultCodexArgs omits --json for text mode", () => {
 
 test("defaultCodexArgs inserts passthrough before the trailing stdin -", () => {
   assert.deepEqual(defaultCodexArgs("text", ["--cd", "/repo"]).slice(-3), ["--cd", "/repo", "-"])
+})
+
+test("defaultAntigravityArgs runs --print with auto-approve and a long print timeout", () => {
+  const args = defaultAntigravityArgs()
+
+  assert.ok(args.includes("--print"))
+  assert.ok(args.includes("--dangerously-skip-permissions"))
+  assert.equal(valueAfter(args, "--print-timeout"), "1h")
+})
+
+test("defaultAntigravityArgs appends passthrough", () => {
+  assert.deepEqual(defaultAntigravityArgs(["--add-dir", "/extra"]).slice(-2), ["--add-dir", "/extra"])
 })
 
 test("ensureStreamJsonVerbose leaves a text default untouched", () => {
