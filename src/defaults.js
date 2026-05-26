@@ -107,3 +107,17 @@ export function defaultCodexArgs(outputFormat = DEFAULTS.outputFormat, passthrou
 
   return [...base, ...passthroughArgs, "-"]
 }
+
+/**
+ * Builds the default Antigravity CLI (`agy`) arguments for a single autonomous
+ * run. `--print` runs one prompt non-interactively (read from stdin) and prints
+ * the text response; `--dangerously-skip-permissions` auto-approves tools. The
+ * `--print-timeout` default (5m) is raised so long autonomous runs are not cut
+ * short. Antigravity has no JSON/event output or turn-limit flag, so the
+ * promptmill output mode does not change its arguments.
+ * @param {string[]} [passthroughArgs] - Extra args, appended (can override the timeout).
+ * @returns {string[]} - CLI arguments for the agy command.
+ */
+export function defaultAntigravityArgs(passthroughArgs = []) {
+  return ["--print", "--dangerously-skip-permissions", "--print-timeout", "1h", ...passthroughArgs]
+}

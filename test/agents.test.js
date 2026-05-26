@@ -16,7 +16,7 @@ function valueAfter(args, flag) {
 }
 
 test("AGENT_NAMES lists the supported agents", () => {
-  assert.deepEqual(AGENT_NAMES, ["claude", "gemini", "codex"])
+  assert.deepEqual(AGENT_NAMES, ["claude", "gemini", "codex", "antigravity"])
 })
 
 test("getAgent throws on an unknown agent", () => {
@@ -100,4 +100,25 @@ test("codex text mode omits --json and passthrough lands before the trailing -",
   const withModel = getAgent("codex").buildArgs(80, "pretty", ["-m", "gpt-5.1-codex"])
 
   assert.deepEqual(withModel.slice(-3), ["-m", "gpt-5.1-codex", "-"]) // passthrough before stdin -
+})
+
+test("the antigravity agent has Antigravity defaults and no renderer", () => {
+  const antigravity = getAgent("antigravity")
+
+  assert.equal(antigravity.command, "agy")
+  assert.equal(antigravity.label, "Antigravity")
+  assert.equal(antigravity.logDir, ".antigravity-runs")
+  assert.equal(antigravity.logFilePrefix, "antigravity-run-")
+  assert.equal(antigravity.usesMaxTurns, false)
+  assert.equal(antigravity.createRenderer, undefined) // text-only; no event stream to render
+})
+
+test("antigravity.buildArgs runs `agy --print` with auto-approve regardless of output mode", () => {
+  const args = getAgent("antigravity").buildArgs(80, "pretty", [])
+
+  assert.ok(args.includes("--print"))
+  assert.ok(args.includes("--dangerously-skip-permissions"))
+  assert.ok(!args.includes("--max-turns"))
+  // The output mode does not change agy's args (it has no JSON/output-format).
+  assert.deepEqual(getAgent("antigravity").buildArgs(80, "text", []), args)
 })

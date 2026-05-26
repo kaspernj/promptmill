@@ -2,3 +2,9 @@ node_modules/
 coverage/
 npm-debug.log*
 *.tgz
+
+# Per-project agent state/log dirs created when running agents in this repo
+.antigravitycli/
+.claude-runs/
+.gemini-runs/
+.codex-runs/

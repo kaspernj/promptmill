@@ -59,6 +59,13 @@ test("--agent codex parses", () => {
   assert.equal(options.agent, "codex")
 })
 
+test("--agent antigravity parses", () => {
+  const options = parse(["prompt.md", "--agent", "antigravity"])
+
+  assert.equal(options.error, null)
+  assert.equal(options.agent, "antigravity")
+})
+
 test("an invalid --agent is flagged without throwing", () => {
   const options = parse(["prompt.md", "--agent", "bard"])
 

@@ -1,6 +1,6 @@
 # Promptmill
 
-Run an agent prompt repeatedly in a batch loop — feeding a prompt file to an agent CLI N times, and tee-ing each run's output to the console and a per-run log file. Useful for batch-testing an autonomous prompt for consistency. Supports **Claude Code** (default), the **Google Gemini CLI**, and the **OpenAI Codex CLI** via `--agent`.
+Run an agent prompt repeatedly in a batch loop — feeding a prompt file to an agent CLI N times, and tee-ing each run's output to the console and a per-run log file. Useful for batch-testing an autonomous prompt for consistency. Supports **Claude Code** (default), the **Google Gemini CLI**, the **OpenAI Codex CLI**, and the **Antigravity CLI** (`agy`) via `--agent`.
 
 ## Install
 
@@ -26,7 +26,7 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 
 | Option | Default | Env | Description |
 | --- | --- | --- | --- |
-| `--agent <name>` | `claude` | | Agent to run: `claude`, `gemini`, or `codex`. Sets the default command, label, and log dir. |
+| `--agent <name>` | `claude` | | Agent to run: `claude`, `gemini`, `codex`, or `antigravity`. Sets the default command, label, and log dir. |
 | `--runs <n>` | `100` (min 0) | `RUNS` | Number of runs |
 | `--max-turns <n>` | `80` (min 1) | `MAX_TURNS` | Max agent turns per run (**Claude only** — Gemini has no turn-limit flag) |
 | `--log-dir <path>` | per agent | `LOG_DIR` | Per-run log directory (`.claude-runs` / `.gemini-runs`) |
@@ -52,6 +52,12 @@ Pass `--agent codex` to drive the **OpenAI Codex CLI** — it must be installed 
 
 ```sh
 promptmill prompts/my-prompt.md --agent codex --runs 25
+```
+
+Pass `--agent antigravity` to drive the **Antigravity CLI** (`agy`) — it must be installed and authenticated. promptmill runs `agy --print --dangerously-skip-permissions` (raising `--print-timeout` so long runs aren't cut at 5 min), feeds the prompt on stdin, and prints the agent's text response. Antigravity has **no JSON/event-stream output**, so it is text-only: every output mode (including `pretty`) shows its plain response — there is no live event rendering. Logs go to `.antigravity-runs/`; `--max-turns` is ignored.
+
+```sh
+promptmill prompts/my-prompt.md --agent antigravity --runs 25
 ```
 
 **Stopping:** press Ctrl+C once for a **graceful stop** — the current run finishes, the next one is skipped, and promptmill exits. Press Ctrl+C **again** to interrupt the current run and exit immediately.
