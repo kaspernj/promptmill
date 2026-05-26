@@ -67,8 +67,62 @@ test("runs the command N times and writes one prompt-bearing log per run", async
 
   const firstLog = await fs.readFile(path.join(logDir, logFiles[0]), "utf8")
 
-  assert.match(firstLog, /PROMPT-MARKER-12345/) // prompt -> child stdin -> tee -> log file
-  assert.match(captured.text(), /PROMPT-MARKER-12345/) // also tee'd to the live stream
+  assert.match(firstLog, /\[run 1\/2\] PROMPT-MARKER-12345/) // prompt -> child stdin -> prefixed tee -> log file
+  assert.match(captured.text(), /\[run 1\/2\] PROMPT-MARKER-12345/) // also tee'd to the live stream
+  assert.match(captured.text(), /\[run 2\/2\] PROMPT-MARKER-12345/)
+})
+
+test("prefixes every output line with the run indicator, including a trailing partial line", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const promptFile = path.join(root, "prompt.md")
+  await fs.writeFile(promptFile, "ignored")
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+
+  await runAgentBatch({
+    args: [fixture("multiline.js")],
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    promptFile,
+    runs: 1,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  const output = captured.text()
+
+  // Two full lines and the trailing partial each get the prefix on their own line.
+  assert.match(output, /\[run 1\/1\] alpha\n/)
+  assert.match(output, /\[run 1\/1\] beta\n/)
+  assert.match(output, /\[run 1\/1\] partial\n/)
+})
+
+test("omits the run prefix when prefixOutputLines is false", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const promptFile = path.join(root, "prompt.md")
+  await fs.writeFile(promptFile, "ignored")
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+
+  await runAgentBatch({
+    args: [fixture("multiline.js")],
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    prefixOutputLines: false,
+    promptFile,
+    runs: 1,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  const output = captured.text()
+
+  assert.match(output, /alpha\nbeta\npartial/)
+  assert.doesNotMatch(output, /\[run /)
 })
 
 test("continues after a non-zero run and counts failures", async () => {
