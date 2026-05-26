@@ -58,6 +58,12 @@ test("resolveModelLevelArgs honors explicit overrides", () => {
   assert.deepEqual(resolveModelLevelArgs(getAgent("claude"), {level: "high", model: "sonnet"}), ["--model", "sonnet", "--effort", "high"])
 })
 
+test("resolveModelLevelArgs maps Spark 5.3 aliases to gpt-5.3-codex-spark for Codex", () => {
+  assert.deepEqual(resolveModelLevelArgs(getAgent("codex"), {level: null, model: "Spark 5.3"}), ["-m", "gpt-5.3-codex-spark", "-c", 'model_reasoning_effort="xhigh"'])
+  assert.deepEqual(resolveModelLevelArgs(getAgent("codex"), {level: null, model: "spark-5.3"}), ["-m", "gpt-5.3-codex-spark", "-c", 'model_reasoning_effort="xhigh"'])
+  assert.deepEqual(resolveModelLevelArgs(getAgent("codex"), {level: null, model: "spark"}), ["-m", "gpt-5.3-codex-spark", "-c", 'model_reasoning_effort="xhigh"'])
+})
+
 test("resolveModelLevelArgs rejects flags an agent does not support", () => {
   assert.throws(() => resolveModelLevelArgs(getAgent("antigravity"), {level: null, model: "x"}), /does not support --model/)
   assert.throws(() => resolveModelLevelArgs(getAgent("gemini"), {level: "high", model: null}), /does not support --level/)

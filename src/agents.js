@@ -63,7 +63,13 @@ const codex = {
   usesMaxTurns: false,
   defaultModel: "gpt-5.5",
   defaultLevel: "xhigh",
-  modelArg: (model) => ["-m", model],
+  modelArg: (model) => {
+    const normalized = model.toLowerCase().replace(/[\s.-]/g, "");
+    if (normalized === "spark" || normalized === "spark53" || normalized === "gpt53spark" || normalized === "gpt53codexspark" || normalized === "codexspark" || normalized === "codexspark53") {
+      return ["-m", "gpt-5.3-codex-spark"];
+    }
+    return ["-m", model];
+  },
   levelArg: (level) => ["-c", `model_reasoning_effort="${level}"`],
   // `codex exec` text mode streams progress to stderr; only the final message
   // is on stdout, so keep stderr off the live console to stay "final result only".
