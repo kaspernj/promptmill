@@ -21,6 +21,7 @@ Options:
                          text is human-readable; stream-json streams raw JSON events.
   --log-file-prefix <s>  Per-run log filename prefix (default ${DEFAULTS.logFilePrefix})
   --label <s>            Console banner label (default ${DEFAULTS.label})
+  --no-line-prefix       Do not prefix each output line with "[run N/total] "
   -h, --help             Show this help
 
 Anything after "--" is appended verbatim to the agent command's arguments.
@@ -40,6 +41,7 @@ Precedence for runs/max-turns/log-dir: flag > env var > default.
  * @property {string} logFilePrefix - Log filename prefix.
  * @property {string} label - Console banner label.
  * @property {"text" | "json" | "stream-json"} outputFormat - Claude output format.
+ * @property {boolean} prefixOutputLines - Whether to prefix output lines with the run indicator.
  * @property {string[]} passthroughArgs - Arguments after "--".
  */
 
@@ -64,6 +66,7 @@ export function parseCliOptions(argv, env = process.env) {
     logFilePrefix: DEFAULTS.logFilePrefix,
     maxTurnsRaw: env.MAX_TURNS || String(DEFAULTS.maxTurns),
     outputFormat: DEFAULTS.outputFormat,
+    prefixOutputLines: true,
     passthroughArgs: [],
     promptFile: null,
     runsRaw: env.RUNS || String(DEFAULTS.runs)
@@ -79,6 +82,11 @@ export function parseCliOptions(argv, env = process.env) {
 
     if (arg === "-h" || arg === "--help") {
       options.help = true
+      continue
+    }
+
+    if (arg === "--no-line-prefix") {
+      options.prefixOutputLines = false
       continue
     }
 
@@ -207,6 +215,7 @@ export async function runCli(argv) {
     onSpawn: (child) => {
       activeChild = child
     },
+    prefixOutputLines: options.prefixOutputLines,
     promptFile,
     runs
   })

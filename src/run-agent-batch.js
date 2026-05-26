@@ -32,6 +32,7 @@ import {spawnAgentRun} from "./run-agent-process.js"
  * @property {string} [cwd] - Working directory for spawns and log-dir resolution.
  * @property {string} [logFilePrefix] - Per-run log filename prefix.
  * @property {string} [label] - Console banner label.
+ * @property {boolean} [prefixOutputLines] - Prefix each agent output line with `[run N/total] ` (default true).
  * @property {import("node:stream").Writable} [stdout] - Live stdout sink.
  * @property {import("node:stream").Writable} [stderr] - Live stderr sink.
  * @property {{log: (message: string) => void}} [logger] - Banner sink.
@@ -56,6 +57,7 @@ export async function runAgentBatch(options) {
     cwd = process.cwd(),
     logFilePrefix = "claude-run-",
     label = "Claude",
+    prefixOutputLines = true,
     stdout = process.stdout,
     stderr = process.stderr,
     logger = console,
@@ -88,6 +90,7 @@ export async function runAgentBatch(options) {
       args: commandArgs,
       command,
       cwd,
+      linePrefix: prefixOutputLines ? `[run ${runNumber}/${runs}] ` : "",
       logStream,
       onSpawn,
       prompt,

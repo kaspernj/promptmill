@@ -34,6 +34,7 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 | `--output-format <fmt>` | `text` | | Claude output: `text` (human-readable), `json`, or `stream-json` (live raw JSON events) |
 | `--log-file-prefix <s>` | `claude-run-` | | Per-run log filename prefix |
 | `--label <s>` | `Claude` | | Console banner label |
+| `--no-line-prefix` | (prefix on) | | Don't prefix each output line with `[run N/total] ` |
 | `-h`, `--help` | | | Show help |
 
 Precedence for `runs` / `max-turns` / `log-dir`: **flag > env var > default**.
@@ -48,6 +49,8 @@ By default promptmill runs `claude` with `--dangerously-skip-permissions --outpu
 promptmill prompts/my-prompt.md                          # readable text (default)
 promptmill prompts/my-prompt.md --output-format stream-json   # live JSON events
 ```
+
+Every output line is prefixed with the run it belongs to, e.g. `[run 3/20] …`, so you always know where you are in the batch. Pass `--no-line-prefix` for unprefixed output (e.g. when piping `--output-format stream-json` to a JSON parser).
 
 ## Use a different agent
 

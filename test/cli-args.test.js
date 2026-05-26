@@ -23,6 +23,14 @@ test("defaults are applied for a bare prompt file", () => {
   assert.equal(options.logDir, ".claude-runs")
   assert.equal(options.command, "claude")
   assert.equal(options.outputFormat, "text")
+  assert.equal(options.prefixOutputLines, true)
+})
+
+test("--no-line-prefix disables the per-line run prefix", () => {
+  const options = parse(["prompt.md", "--no-line-prefix"])
+
+  assert.equal(options.error, null)
+  assert.equal(options.prefixOutputLines, false)
 })
 
 test("--output-format parses a valid value", () => {
