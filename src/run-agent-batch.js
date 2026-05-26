@@ -35,6 +35,7 @@ import {spawnAgentRun} from "./run-agent-process.js"
  * @property {string} [label] - Console banner label.
  * @property {boolean} [prefixOutputLines] - Prefix each agent output line with `[run N/total] ` (default true).
  * @property {import("./run-agent-process.js").CreateRenderer} [createRenderer] - Renders the agent's stream-json into readable lines (the `pretty` mode); omit for raw output.
+ * @property {boolean} [logStderrOnly] - Send the agent's stderr to the log only, not the live console.
  * @property {import("node:stream").Writable} [stdout] - Live stdout sink.
  * @property {import("node:stream").Writable} [stderr] - Live stderr sink.
  * @property {{log: (message: string) => void}} [logger] - Banner sink.
@@ -62,6 +63,7 @@ export async function runAgentBatch(options) {
     label = "Claude",
     prefixOutputLines = true,
     createRenderer,
+    logStderrOnly = false,
     stdout = process.stdout,
     stderr = process.stderr,
     logger = console,
@@ -103,6 +105,7 @@ export async function runAgentBatch(options) {
       cwd,
       createRenderer,
       linePrefix: prefixOutputLines ? `[run ${runNumber}/${runs}] ` : "",
+      logStderrOnly,
       logStream,
       onSpawn,
       prompt,

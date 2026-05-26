@@ -74,6 +74,12 @@ test("the codex agent has Codex defaults", () => {
   assert.equal(codex.logDir, ".codex-runs")
   assert.equal(codex.logFilePrefix, "codex-run-")
   assert.equal(codex.usesMaxTurns, false)
+  assert.equal(codex.textProgressOnStderr, true)
+})
+
+test("only codex declares text-mode progress on stderr", () => {
+  assert.notEqual(getAgent("claude").textProgressOnStderr, true)
+  assert.notEqual(getAgent("gemini").textProgressOnStderr, true)
 })
 
 test("codex.buildArgs runs `exec --json` with sandbox bypass, prompt via trailing stdin -", () => {
