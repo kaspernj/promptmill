@@ -2,7 +2,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import {parseCliOptions} from "../src/cli.js"
+import {getAgent} from "../src/agents.js"
+import {parseCliOptions, resolveMaxTurns} from "../src/cli.js"
 
 /**
  * @param {string[]} args - CLI args after the program name.
@@ -20,10 +21,12 @@ test("defaults are applied for a bare prompt file", () => {
   assert.equal(options.promptFile, "prompt.md")
   assert.equal(options.runsRaw, "100")
   assert.equal(options.maxTurnsRaw, "80")
-  assert.equal(options.logDir, ".claude-runs")
-  assert.equal(options.command, "claude")
+  assert.equal(options.agent, "claude")
   assert.equal(options.outputFormat, "pretty")
   assert.equal(options.prefixOutputLines, true)
+  // command/label/logDir/logFilePrefix are null until resolved from the agent in runCli.
+  assert.equal(options.command, null)
+  assert.equal(options.logDir, null)
 })
 
 test("--output-format pretty parses", () => {
@@ -31,6 +34,34 @@ test("--output-format pretty parses", () => {
 
   assert.equal(options.error, null)
   assert.equal(options.outputFormat, "pretty")
+})
+
+test("resolveMaxTurns validates for Claude but ignores the value for Gemini", () => {
+  // Claude honors --max-turns: valid parses, invalid throws.
+  assert.equal(resolveMaxTurns(getAgent("claude"), "60"), 60)
+  assert.throws(() => resolveMaxTurns(getAgent("claude"), "not-a-number"), /max-turns must be an integer/)
+
+  // Gemini ignores it entirely, so an invalid value never fails its runs.
+  assert.equal(resolveMaxTurns(getAgent("gemini"), "not-a-number"), 80)
+})
+
+test("--agent gemini parses", () => {
+  const options = parse(["prompt.md", "--agent", "gemini"])
+
+  assert.equal(options.error, null)
+  assert.equal(options.agent, "gemini")
+})
+
+test("an invalid --agent is flagged without throwing", () => {
+  const options = parse(["prompt.md", "--agent", "bard"])
+
+  assert.match(String(options.error), /Invalid --agent: bard\./)
+})
+
+test("an explicit --log-dir overrides the agent default", () => {
+  const options = parse(["prompt.md", "--agent", "gemini", "--log-dir", ".custom"])
+
+  assert.equal(options.logDir, ".custom")
 })
 
 test("--no-line-prefix disables the per-line run prefix", () => {

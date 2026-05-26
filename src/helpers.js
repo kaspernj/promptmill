@@ -54,6 +54,32 @@ export function integerOption(rawValue, {name, fallback, minimum}) {
 }
 
 /**
+ * Truncates text to the first line and a maximum length, appending an ellipsis
+ * when cut. Used by the stream renderers to keep tool/result lines concise.
+ * @param {string} text - The text to truncate.
+ * @param {number} max - Maximum length before truncation.
+ * @returns {string} - The truncated (or original) first line.
+ */
+export function truncate(text, max) {
+  const firstLine = text.split("\n")[0]
+
+  return firstLine.length > max ? `${firstLine.slice(0, max - 1)}…` : firstLine
+}
+
+/**
+ * Formats a millisecond duration as a compact `MmSs` / `Ss` string.
+ * @param {number} ms - Duration in milliseconds.
+ * @returns {string} - Compact duration label.
+ */
+export function formatDuration(ms) {
+  const totalSeconds = Math.round(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+
+  return minutes > 0 ? `${minutes}m${seconds}s` : `${seconds}s`
+}
+
+/**
  * Builds a per-run log filename (without directory).
  * @param {object} args - Options.
  * @param {string} args.logFilePrefix - Filename prefix.

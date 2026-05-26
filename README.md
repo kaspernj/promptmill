@@ -1,6 +1,6 @@
 # Promptmill
 
-Run an agent prompt repeatedly in a batch loop — feeding a prompt file to an agent CLI (Claude Code by default) N times, and tee-ing each run's output to the console and a per-run log file. Useful for batch-testing an autonomous prompt for consistency.
+Run an agent prompt repeatedly in a batch loop — feeding a prompt file to an agent CLI N times, and tee-ing each run's output to the console and a per-run log file. Useful for batch-testing an autonomous prompt for consistency. Supports **Claude Code** (default) and the **Google Gemini CLI** via `--agent`.
 
 ## Install
 
@@ -26,18 +26,27 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 
 | Option | Default | Env | Description |
 | --- | --- | --- | --- |
+| `--agent <name>` | `claude` | | Agent to run: `claude` or `gemini`. Sets the default command, label, and log dir. |
 | `--runs <n>` | `100` (min 0) | `RUNS` | Number of runs |
-| `--max-turns <n>` | `80` (min 1) | `MAX_TURNS` | Max agent turns per run |
-| `--log-dir <path>` | `.claude-runs` | `LOG_DIR` | Per-run log directory |
-| `--command <cmd>` | `claude` | | Agent executable to spawn |
+| `--max-turns <n>` | `80` (min 1) | `MAX_TURNS` | Max agent turns per run (**Claude only** — Gemini has no turn-limit flag) |
+| `--log-dir <path>` | per agent | `LOG_DIR` | Per-run log directory (`.claude-runs` / `.gemini-runs`) |
+| `--command <cmd>` | the agent's | | Agent executable to spawn (`claude` / `gemini`) |
 | `--cwd <path>` | current dir | | Working directory |
 | `--output-format <fmt>` | `pretty` | | Output mode: `pretty` (live readable progress), `text` (final result only), `json`, or `stream-json` (raw JSON events) |
-| `--log-file-prefix <s>` | `claude-run-` | | Per-run log filename prefix |
-| `--label <s>` | `Claude` | | Console banner label |
+| `--log-file-prefix <s>` | per agent | | Per-run log filename prefix |
+| `--label <s>` | the agent's | | Console banner label |
 | `--no-line-prefix` | (prefix on) | | Don't prefix each output line with `[run N/total] ` |
 | `-h`, `--help` | | | Show help |
 
 Precedence for `runs` / `max-turns` / `log-dir`: **flag > env var > default**.
+
+### Agents
+
+By default promptmill drives **Claude Code** (`claude`). Pass `--agent gemini` to drive the **Google Gemini CLI** instead — it must be installed (`npm i -g @google/gemini-cli`) and authenticated. promptmill runs Gemini headless with `--approval-mode yolo`, feeds the prompt on stdin, and (in the default `pretty` mode) renders Gemini's `stream-json` events into the same live, readable progress. Gemini logs go to `.gemini-runs/`. `--max-turns` applies to Claude only.
+
+```sh
+promptmill prompts/my-prompt.md --agent gemini --runs 25
+```
 
 **Stopping:** press Ctrl+C once for a **graceful stop** — the current run finishes, the next one is skipped, and promptmill exits. Press Ctrl+C **again** to interrupt the current run and exit immediately.
 

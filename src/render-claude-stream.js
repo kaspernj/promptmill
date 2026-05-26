@@ -1,4 +1,5 @@
 // @ts-check
+import {formatDuration, truncate} from "./helpers.js"
 
 /**
  * @typedef {object} ClaudeToolInput
@@ -44,31 +45,6 @@
  * @property {(chunk: Buffer | string) => void} write - Buffers a chunk and renders any completed NDJSON lines.
  * @property {() => void} flush - Renders any buffered trailing line.
  */
-
-/**
- * Truncates a string to a maximum length, appending an ellipsis when cut.
- * @param {string} text - The text to truncate.
- * @param {number} max - Maximum length before truncation.
- * @returns {string} - The truncated (or original) text.
- */
-function truncate(text, max) {
-  const firstLine = text.split("\n")[0]
-
-  return firstLine.length > max ? `${firstLine.slice(0, max - 1)}…` : firstLine
-}
-
-/**
- * Formats a millisecond duration as a compact `MmSs` / `Ss` string.
- * @param {number} ms - Duration in milliseconds.
- * @returns {string} - Compact duration label.
- */
-function formatDuration(ms) {
-  const totalSeconds = Math.round(ms / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-
-  return minutes > 0 ? `${minutes}m${seconds}s` : `${seconds}s`
-}
 
 /**
  * Summarizes a tool_use input into a short, human-readable target.

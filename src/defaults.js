@@ -2,6 +2,7 @@
 
 /**
  * @typedef {object} PromptmillDefaults
+ * @property {string} agent - Default agent name.
  * @property {number} runs - Default number of runs.
  * @property {number} maxTurns - Default maximum agent turns per run.
  * @property {string} logDir - Default per-run log directory.
@@ -13,6 +14,7 @@
 
 /** @type {PromptmillDefaults} */
 export const DEFAULTS = {
+  agent: "claude",
   runs: 100,
   maxTurns: 80,
   logDir: ".claude-runs",
@@ -72,4 +74,19 @@ export function ensureStreamJsonVerbose(args) {
   if (effectiveFormat === "stream-json" && !args.includes("--verbose")) return [...args, "--verbose"]
 
   return args
+}
+
+/**
+ * Builds the default Gemini CLI arguments for a single autonomous run. The
+ * prompt is supplied via stdin (Gemini runs headless in a non-TTY and reads
+ * stdin as the prompt), `--approval-mode yolo` auto-approves tool calls, and
+ * `pretty` maps to `stream-json` (promptmill renders the events). Gemini has no
+ * turn-limit CLI flag, so `maxTurns` does not apply.
+ * @param {"pretty" | "text" | "json" | "stream-json"} [outputFormat] - promptmill output mode.
+ * @returns {string[]} - CLI arguments for the gemini command.
+ */
+export function defaultGeminiArgs(outputFormat = DEFAULTS.outputFormat) {
+  const geminiFormat = outputFormat === "pretty" ? "stream-json" : outputFormat
+
+  return ["--approval-mode", "yolo", "--output-format", geminiFormat]
 }

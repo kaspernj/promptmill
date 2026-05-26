@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs, ensureStreamJsonVerbose} from "../src/defaults.js"
+import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs, defaultGeminiArgs, ensureStreamJsonVerbose} from "../src/defaults.js"
 
 /**
  * @param {string[]} args - Assembled CLI args.
@@ -54,6 +54,19 @@ test("json output does not add --verbose", () => {
 
   assert.equal(valueAfter(args, "--output-format"), "json")
   assert.ok(!args.includes("--verbose"))
+})
+
+test("defaultGeminiArgs maps pretty to stream-json with approval-mode yolo", () => {
+  const args = defaultGeminiArgs("pretty")
+
+  assert.equal(valueAfter(args, "--approval-mode"), "yolo")
+  assert.equal(valueAfter(args, "--output-format"), "stream-json")
+  assert.ok(!args.includes("--verbose"))
+})
+
+test("defaultGeminiArgs passes text and json through", () => {
+  assert.equal(valueAfter(defaultGeminiArgs("text"), "--output-format"), "text")
+  assert.equal(valueAfter(defaultGeminiArgs("json"), "--output-format"), "json")
 })
 
 test("ensureStreamJsonVerbose leaves a text default untouched", () => {

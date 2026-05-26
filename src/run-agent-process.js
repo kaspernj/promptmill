@@ -1,12 +1,14 @@
 // @ts-check
 import {spawn} from "node:child_process"
 
-import {createClaudeStreamRenderer} from "./render-claude-stream.js"
-
 /**
  * @typedef {object} AgentRunStatus
  * @property {number} code - Exit code (1 when the process errored or was signaled).
  * @property {string | null} [signal] - Terminating signal, when the process was killed by one.
+ */
+
+/**
+ * @typedef {(prefix: string, sinks: import("node:stream").Writable[]) => LinePrefixer} CreateRenderer
  */
 
 /**
@@ -69,11 +71,11 @@ function createLinePrefixer(prefix, sinks) {
  * @param {import("node:stream").Writable} args.stderr - Live stderr sink.
  * @param {import("node:stream").Writable} args.logStream - Per-run log sink.
  * @param {string} [args.linePrefix] - Prepended to each output line; empty string passes output through unchanged.
- * @param {boolean} [args.render] - Render Claude stream-json stdout into readable lines (the `pretty` mode).
+ * @param {CreateRenderer} [args.createRenderer] - Builds a stdout writer that renders the agent's stream-json into readable lines (the `pretty` mode).
  * @param {(child: import("node:child_process").ChildProcess) => void} [args.onSpawn] - Receives the spawned child.
  * @returns {Promise<AgentRunStatus>} - Resolves with the run status.
  */
-export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", render = false, onSpawn}) {
+export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", createRenderer, onSpawn}) {
   return new Promise((resolve) => {
     // `detached` puts the child in its own process group, so a terminal Ctrl+C
     // (SIGINT to the foreground group) does not reach it — promptmill decides
@@ -84,8 +86,8 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
       onSpawn(child)
     }
 
-    const outWriter = render
-      ? createClaudeStreamRenderer(linePrefix, [stdout, logStream])
+    const outWriter = createRenderer
+      ? createRenderer(linePrefix, [stdout, logStream])
       : (linePrefix ? createLinePrefixer(linePrefix, [stdout, logStream]) : null)
     const errPrefixer = linePrefix ? createLinePrefixer(linePrefix, [stderr, logStream]) : null
 
