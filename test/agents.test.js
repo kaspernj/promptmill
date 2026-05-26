@@ -30,6 +30,7 @@ test("the claude agent has Claude defaults", () => {
   assert.equal(claude.label, "Claude")
   assert.equal(claude.logDir, ".claude-runs")
   assert.equal(claude.logFilePrefix, "claude-run-")
+  assert.equal(claude.usesMaxTurns, true)
 })
 
 test("claude.buildArgs maps pretty to stream-json with --verbose and includes --max-turns", () => {
@@ -47,6 +48,7 @@ test("the gemini agent has Gemini defaults", () => {
   assert.equal(gemini.label, "Gemini")
   assert.equal(gemini.logDir, ".gemini-runs")
   assert.equal(gemini.logFilePrefix, "gemini-run-")
+  assert.equal(gemini.usesMaxTurns, false)
 })
 
 test("gemini.buildArgs uses approval-mode yolo and stream-json, without claude-only flags", () => {

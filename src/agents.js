@@ -10,6 +10,7 @@ import {createGeminiStreamRenderer} from "./render-gemini-stream.js"
  * @property {string} label - Console banner label.
  * @property {string} logDir - Default per-run log directory.
  * @property {string} logFilePrefix - Default per-run log filename prefix.
+ * @property {boolean} usesMaxTurns - Whether the agent honors a per-run turn limit (`--max-turns`).
  * @property {(maxTurns: number, outputFormat: "pretty" | "text" | "json" | "stream-json", passthroughArgs: string[]) => string[]} buildArgs - Builds the agent's CLI args.
  * @property {(prefix: string, sinks: import("node:stream").Writable[]) => {write: (chunk: Buffer | string) => void, flush: () => void}} createRenderer - Live `pretty` stream renderer.
  */
@@ -21,6 +22,7 @@ const claude = {
   label: "Claude",
   logDir: ".claude-runs",
   logFilePrefix: "claude-run-",
+  usesMaxTurns: true,
   buildArgs: (maxTurns, outputFormat, passthroughArgs) =>
     ensureStreamJsonVerbose([...defaultClaudeArgs(maxTurns, outputFormat), ...passthroughArgs]),
   createRenderer: createClaudeStreamRenderer
@@ -33,6 +35,7 @@ const gemini = {
   label: "Gemini",
   logDir: ".gemini-runs",
   logFilePrefix: "gemini-run-",
+  usesMaxTurns: false,
   // Gemini reads the prompt from stdin (no -p) and has no turn-limit CLI flag.
   buildArgs: (_maxTurns, outputFormat, passthroughArgs) => [...defaultGeminiArgs(outputFormat), ...passthroughArgs],
   createRenderer: createGeminiStreamRenderer

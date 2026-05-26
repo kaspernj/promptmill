@@ -2,7 +2,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import {parseCliOptions} from "../src/cli.js"
+import {getAgent} from "../src/agents.js"
+import {parseCliOptions, resolveMaxTurns} from "../src/cli.js"
 
 /**
  * @param {string[]} args - CLI args after the program name.
@@ -33,6 +34,15 @@ test("--output-format pretty parses", () => {
 
   assert.equal(options.error, null)
   assert.equal(options.outputFormat, "pretty")
+})
+
+test("resolveMaxTurns validates for Claude but ignores the value for Gemini", () => {
+  // Claude honors --max-turns: valid parses, invalid throws.
+  assert.equal(resolveMaxTurns(getAgent("claude"), "60"), 60)
+  assert.throws(() => resolveMaxTurns(getAgent("claude"), "not-a-number"), /max-turns must be an integer/)
+
+  // Gemini ignores it entirely, so an invalid value never fails its runs.
+  assert.equal(resolveMaxTurns(getAgent("gemini"), "not-a-number"), 80)
 })
 
 test("--agent gemini parses", () => {

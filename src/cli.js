@@ -160,6 +160,21 @@ export function parseCliOptions(argv, env = process.env) {
 }
 
 /**
+ * Resolves the per-run max-turns value for an agent. Agents that do not honor a
+ * turn limit (e.g. Gemini) ignore `--max-turns`/`MAX_TURNS` entirely, so an
+ * invalid value never fails their runs; only turn-aware agents validate it.
+ * @param {{usesMaxTurns: boolean}} agent - The selected agent.
+ * @param {string} maxTurnsRaw - Raw max-turns value (flag or env).
+ * @returns {number} - The resolved max-turns (the default when unused by the agent).
+ * @throws {Error} When the agent honors max-turns and the value is invalid.
+ */
+export function resolveMaxTurns(agent, maxTurnsRaw) {
+  if (!agent.usesMaxTurns) return DEFAULTS.maxTurns
+
+  return integerOption(maxTurnsRaw, {fallback: DEFAULTS.maxTurns, minimum: 1, name: "max-turns"})
+}
+
+/**
  * Runs the promptmill CLI.
  * @param {string[]} argv - Full process argv (i.e. `process.argv`).
  * @returns {Promise<number>} - The process exit code.
@@ -177,6 +192,8 @@ export async function runCli(argv) {
     return 1
   }
 
+  const agent = getAgent(options.agent)
+
   /** @type {number} */
   let runs
   /** @type {number} */
@@ -184,7 +201,7 @@ export async function runCli(argv) {
 
   try {
     runs = integerOption(options.runsRaw, {fallback: DEFAULTS.runs, minimum: 0, name: "runs"})
-    maxTurns = integerOption(options.maxTurnsRaw, {fallback: DEFAULTS.maxTurns, minimum: 1, name: "max-turns"})
+    maxTurns = resolveMaxTurns(agent, options.maxTurnsRaw)
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
     return 1
@@ -215,7 +232,6 @@ export async function runCli(argv) {
 
   const passthroughArgs = options.passthroughArgs
   const outputFormat = options.outputFormat
-  const agent = getAgent(options.agent)
 
   const result = await runAgentBatch({
     args: (turns) => agent.buildArgs(turns, outputFormat, passthroughArgs),
