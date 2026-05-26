@@ -90,3 +90,20 @@ export function defaultGeminiArgs(outputFormat = DEFAULTS.outputFormat) {
 
   return ["--approval-mode", "yolo", "--output-format", geminiFormat]
 }
+
+/**
+ * Builds the default OpenAI Codex CLI arguments for a single autonomous run.
+ * Uses the non-interactive `codex exec` subcommand, reads the prompt from stdin
+ * (the trailing `-`), and `--dangerously-bypass-approvals-and-sandbox` so
+ * unattended runs never pause. `--json` (JSONL events) is added for every mode
+ * except `text` — `pretty` renders those events; `json`/`stream-json` pass them
+ * through raw. Codex has no single-object JSON or turn-limit flag.
+ * @param {"pretty" | "text" | "json" | "stream-json"} [outputFormat] - promptmill output mode.
+ * @param {string[]} [passthroughArgs] - Extra args, inserted before the trailing stdin `-`.
+ * @returns {string[]} - CLI arguments for the codex command.
+ */
+export function defaultCodexArgs(outputFormat = DEFAULTS.outputFormat, passthroughArgs = []) {
+  const base = ["exec", ...(outputFormat === "text" ? [] : ["--json"]), "--dangerously-bypass-approvals-and-sandbox"]
+
+  return [...base, ...passthroughArgs, "-"]
+}

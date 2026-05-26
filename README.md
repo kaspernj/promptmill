@@ -1,6 +1,6 @@
 # Promptmill
 
-Run an agent prompt repeatedly in a batch loop — feeding a prompt file to an agent CLI N times, and tee-ing each run's output to the console and a per-run log file. Useful for batch-testing an autonomous prompt for consistency. Supports **Claude Code** (default) and the **Google Gemini CLI** via `--agent`.
+Run an agent prompt repeatedly in a batch loop — feeding a prompt file to an agent CLI N times, and tee-ing each run's output to the console and a per-run log file. Useful for batch-testing an autonomous prompt for consistency. Supports **Claude Code** (default), the **Google Gemini CLI**, and the **OpenAI Codex CLI** via `--agent`.
 
 ## Install
 
@@ -26,7 +26,7 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 
 | Option | Default | Env | Description |
 | --- | --- | --- | --- |
-| `--agent <name>` | `claude` | | Agent to run: `claude` or `gemini`. Sets the default command, label, and log dir. |
+| `--agent <name>` | `claude` | | Agent to run: `claude`, `gemini`, or `codex`. Sets the default command, label, and log dir. |
 | `--runs <n>` | `100` (min 0) | `RUNS` | Number of runs |
 | `--max-turns <n>` | `80` (min 1) | `MAX_TURNS` | Max agent turns per run (**Claude only** — Gemini has no turn-limit flag) |
 | `--log-dir <path>` | per agent | `LOG_DIR` | Per-run log directory (`.claude-runs` / `.gemini-runs`) |
@@ -46,6 +46,12 @@ By default promptmill drives **Claude Code** (`claude`). Pass `--agent gemini` t
 
 ```sh
 promptmill prompts/my-prompt.md --agent gemini --runs 25
+```
+
+Pass `--agent codex` to drive the **OpenAI Codex CLI** — it must be installed and signed in (`codex login`). promptmill runs `codex exec --dangerously-bypass-approvals-and-sandbox`, feeds the prompt on stdin, and (in `pretty` mode) renders Codex's `--json` events (`thread.started`, command executions, file changes, the agent's message, token usage) into live, readable progress. Codex must run **inside a git repository** (its own guard — pass `-- --skip-git-repo-check` to bypass) and logs go to `.codex-runs/`. Codex has no turn limit, so `--max-turns` is ignored.
+
+```sh
+promptmill prompts/my-prompt.md --agent codex --runs 25
 ```
 
 **Stopping:** press Ctrl+C once for a **graceful stop** — the current run finishes, the next one is skipped, and promptmill exits. Press Ctrl+C **again** to interrupt the current run and exit immediately.

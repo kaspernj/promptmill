@@ -1,6 +1,7 @@
 // @ts-check
-import {defaultClaudeArgs, defaultGeminiArgs, ensureStreamJsonVerbose} from "./defaults.js"
+import {defaultClaudeArgs, defaultCodexArgs, defaultGeminiArgs, ensureStreamJsonVerbose} from "./defaults.js"
 import {createClaudeStreamRenderer} from "./render-claude-stream.js"
+import {createCodexStreamRenderer} from "./render-codex-stream.js"
 import {createGeminiStreamRenderer} from "./render-gemini-stream.js"
 
 /**
@@ -41,8 +42,21 @@ const gemini = {
   createRenderer: createGeminiStreamRenderer
 }
 
+/** @type {Agent} */
+const codex = {
+  name: "codex",
+  command: "codex",
+  label: "Codex",
+  logDir: ".codex-runs",
+  logFilePrefix: "codex-run-",
+  usesMaxTurns: false,
+  // `codex exec` reads the prompt from stdin (trailing -); no turn-limit flag.
+  buildArgs: (_maxTurns, outputFormat, passthroughArgs) => defaultCodexArgs(outputFormat, passthroughArgs),
+  createRenderer: createCodexStreamRenderer
+}
+
 /** @type {Record<string, Agent>} */
-const AGENTS = {claude, gemini}
+const AGENTS = {claude, gemini, codex}
 
 /** Agent identifiers accepted by `--agent`. */
 export const AGENT_NAMES = Object.keys(AGENTS)
