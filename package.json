@@ -25,6 +25,10 @@
   "bin": {
     "promptmill": "./bin/promptmill"
   },
+  "files": [
+    "bin/**",
+    "src/**"
+  ],
   "scripts": {
     "all-checks": "npm run typecheck && npm run lint && npm test",
     "lint": "eslint",
