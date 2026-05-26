@@ -16,7 +16,7 @@ function valueAfter(args, flag) {
 }
 
 test("AGENT_NAMES lists the supported agents", () => {
-  assert.deepEqual(AGENT_NAMES, ["claude", "gemini"])
+  assert.deepEqual(AGENT_NAMES, ["claude", "gemini", "codex"])
 })
 
 test("getAgent throws on an unknown agent", () => {
@@ -64,4 +64,40 @@ test("gemini.buildArgs uses approval-mode yolo and stream-json, without claude-o
 test("buildArgs appends passthrough args for both agents", () => {
   assert.deepEqual(getAgent("gemini").buildArgs(80, "text", ["-m", "gemini-2.5-pro"]).slice(-2), ["-m", "gemini-2.5-pro"])
   assert.deepEqual(getAgent("claude").buildArgs(80, "text", ["--foo"]).slice(-1), ["--foo"])
+})
+
+test("the codex agent has Codex defaults", () => {
+  const codex = getAgent("codex")
+
+  assert.equal(codex.command, "codex")
+  assert.equal(codex.label, "Codex")
+  assert.equal(codex.logDir, ".codex-runs")
+  assert.equal(codex.logFilePrefix, "codex-run-")
+  assert.equal(codex.usesMaxTurns, false)
+  assert.equal(codex.textProgressOnStderr, true)
+})
+
+test("only codex declares text-mode progress on stderr", () => {
+  assert.notEqual(getAgent("claude").textProgressOnStderr, true)
+  assert.notEqual(getAgent("gemini").textProgressOnStderr, true)
+})
+
+test("codex.buildArgs runs `exec --json` with sandbox bypass, prompt via trailing stdin -", () => {
+  const args = getAgent("codex").buildArgs(80, "pretty", [])
+
+  assert.equal(args[0], "exec")
+  assert.ok(args.includes("--json"))
+  assert.ok(args.includes("--dangerously-bypass-approvals-and-sandbox"))
+  assert.equal(args.at(-1), "-") // prompt read from stdin
+  assert.ok(!args.includes("--max-turns"))
+})
+
+test("codex text mode omits --json and passthrough lands before the trailing -", () => {
+  const text = getAgent("codex").buildArgs(80, "text", [])
+
+  assert.ok(!text.includes("--json"))
+
+  const withModel = getAgent("codex").buildArgs(80, "pretty", ["-m", "gpt-5.1-codex"])
+
+  assert.deepEqual(withModel.slice(-3), ["-m", "gpt-5.1-codex", "-"]) // passthrough before stdin -
 })

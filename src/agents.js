@@ -1,6 +1,7 @@
 // @ts-check
-import {defaultClaudeArgs, defaultGeminiArgs, ensureStreamJsonVerbose} from "./defaults.js"
+import {defaultClaudeArgs, defaultCodexArgs, defaultGeminiArgs, ensureStreamJsonVerbose} from "./defaults.js"
 import {createClaudeStreamRenderer} from "./render-claude-stream.js"
+import {createCodexStreamRenderer} from "./render-codex-stream.js"
 import {createGeminiStreamRenderer} from "./render-gemini-stream.js"
 
 /**
@@ -11,6 +12,7 @@ import {createGeminiStreamRenderer} from "./render-gemini-stream.js"
  * @property {string} logDir - Default per-run log directory.
  * @property {string} logFilePrefix - Default per-run log filename prefix.
  * @property {boolean} usesMaxTurns - Whether the agent honors a per-run turn limit (`--max-turns`).
+ * @property {boolean} [textProgressOnStderr] - Whether the agent's `text` mode streams progress to stderr (only the final result on stdout). When set, promptmill keeps stderr off the live console in `text` mode to preserve the "final result only" contract.
  * @property {(maxTurns: number, outputFormat: "pretty" | "text" | "json" | "stream-json", passthroughArgs: string[]) => string[]} buildArgs - Builds the agent's CLI args.
  * @property {(prefix: string, sinks: import("node:stream").Writable[]) => {write: (chunk: Buffer | string) => void, flush: () => void}} createRenderer - Live `pretty` stream renderer.
  */
@@ -41,8 +43,24 @@ const gemini = {
   createRenderer: createGeminiStreamRenderer
 }
 
+/** @type {Agent} */
+const codex = {
+  name: "codex",
+  command: "codex",
+  label: "Codex",
+  logDir: ".codex-runs",
+  logFilePrefix: "codex-run-",
+  usesMaxTurns: false,
+  // `codex exec` text mode streams progress to stderr; only the final message
+  // is on stdout, so keep stderr off the live console to stay "final result only".
+  textProgressOnStderr: true,
+  // `codex exec` reads the prompt from stdin (trailing -); no turn-limit flag.
+  buildArgs: (_maxTurns, outputFormat, passthroughArgs) => defaultCodexArgs(outputFormat, passthroughArgs),
+  createRenderer: createCodexStreamRenderer
+}
+
 /** @type {Record<string, Agent>} */
-const AGENTS = {claude, gemini}
+const AGENTS = {claude, gemini, codex}
 
 /** Agent identifiers accepted by `--agent`. */
 export const AGENT_NAMES = Object.keys(AGENTS)

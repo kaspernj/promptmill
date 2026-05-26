@@ -72,10 +72,11 @@ function createLinePrefixer(prefix, sinks) {
  * @param {import("node:stream").Writable} args.logStream - Per-run log sink.
  * @param {string} [args.linePrefix] - Prepended to each output line; empty string passes output through unchanged.
  * @param {CreateRenderer} [args.createRenderer] - Builds a stdout writer that renders the agent's stream-json into readable lines (the `pretty` mode).
+ * @param {boolean} [args.logStderrOnly] - Send the child's stderr to the log only, not the live console (e.g. an agent that streams progress to stderr in a "final result only" mode).
  * @param {(child: import("node:child_process").ChildProcess) => void} [args.onSpawn] - Receives the spawned child.
  * @returns {Promise<AgentRunStatus>} - Resolves with the run status.
  */
-export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", createRenderer, onSpawn}) {
+export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", createRenderer, logStderrOnly = false, onSpawn}) {
   return new Promise((resolve) => {
     // `detached` puts the child in its own process group, so a terminal Ctrl+C
     // (SIGINT to the foreground group) does not reach it — promptmill decides
@@ -86,10 +87,14 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
       onSpawn(child)
     }
 
+    // When logStderrOnly, the child's stderr is captured in the log but kept off
+    // the live console, so a "final result only" mode stays quiet on the terminal.
+    const errSinks = logStderrOnly ? [logStream] : [stderr, logStream]
+
     const outWriter = createRenderer
       ? createRenderer(linePrefix, [stdout, logStream])
       : (linePrefix ? createLinePrefixer(linePrefix, [stdout, logStream]) : null)
-    const errPrefixer = linePrefix ? createLinePrefixer(linePrefix, [stderr, logStream]) : null
+    const errPrefixer = linePrefix ? createLinePrefixer(linePrefix, errSinks) : null
 
     child.stdout?.on("data", (chunk) => {
       if (outWriter) {
@@ -104,8 +109,9 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
       if (errPrefixer) {
         errPrefixer.write(chunk)
       } else {
-        stderr.write(chunk)
-        logStream.write(chunk)
+        for (const sink of errSinks) {
+          sink.write(chunk)
+        }
       }
     })
 

@@ -238,6 +238,7 @@ export async function runCli(argv) {
     command: options.command ?? agent.command,
     createRenderer: outputFormat === "pretty" ? agent.createRenderer : undefined,
     cwd: options.cwd,
+    logStderrOnly: outputFormat === "text" && agent.textProgressOnStderr === true,
     label: options.label ?? agent.label,
     logDir: options.logDir ?? agent.logDir,
     logFilePrefix: options.logFilePrefix ?? agent.logFilePrefix,

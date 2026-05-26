@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs, defaultGeminiArgs, ensureStreamJsonVerbose} from "../src/defaults.js"
+import {DEFAULTS, OUTPUT_FORMATS, defaultClaudeArgs, defaultCodexArgs, defaultGeminiArgs, ensureStreamJsonVerbose} from "../src/defaults.js"
 
 /**
  * @param {string[]} args - Assembled CLI args.
@@ -67,6 +67,28 @@ test("defaultGeminiArgs maps pretty to stream-json with approval-mode yolo", () 
 test("defaultGeminiArgs passes text and json through", () => {
   assert.equal(valueAfter(defaultGeminiArgs("text"), "--output-format"), "text")
   assert.equal(valueAfter(defaultGeminiArgs("json"), "--output-format"), "json")
+})
+
+test("defaultCodexArgs uses exec --json for non-text modes and reads stdin", () => {
+  for (const format of ["pretty", "json", "stream-json"]) {
+    const args = defaultCodexArgs(/** @type {"pretty" | "json" | "stream-json"} */ (format))
+
+    assert.equal(args[0], "exec")
+    assert.ok(args.includes("--json"))
+    assert.ok(args.includes("--dangerously-bypass-approvals-and-sandbox"))
+    assert.equal(args.at(-1), "-")
+  }
+})
+
+test("defaultCodexArgs omits --json for text mode", () => {
+  const args = defaultCodexArgs("text")
+
+  assert.ok(!args.includes("--json"))
+  assert.equal(args.at(-1), "-")
+})
+
+test("defaultCodexArgs inserts passthrough before the trailing stdin -", () => {
+  assert.deepEqual(defaultCodexArgs("text", ["--cd", "/repo"]).slice(-3), ["--cd", "/repo", "-"])
 })
 
 test("ensureStreamJsonVerbose leaves a text default untouched", () => {

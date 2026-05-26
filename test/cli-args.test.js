@@ -52,6 +52,13 @@ test("--agent gemini parses", () => {
   assert.equal(options.agent, "gemini")
 })
 
+test("--agent codex parses", () => {
+  const options = parse(["prompt.md", "--agent", "codex"])
+
+  assert.equal(options.error, null)
+  assert.equal(options.agent, "codex")
+})
+
 test("an invalid --agent is flagged without throwing", () => {
   const options = parse(["prompt.md", "--agent", "bard"])
 

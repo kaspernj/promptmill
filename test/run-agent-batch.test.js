@@ -183,6 +183,37 @@ test("pretty render mode prints readable lines from Claude stream-json", async (
   assert.doesNotMatch(output, /"type":"assistant"/) // raw JSON is rendered away, not printed
 })
 
+test("logStderrOnly keeps the child's stderr off the live console but in the log", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const promptFile = path.join(root, "prompt.md")
+  await fs.writeFile(promptFile, "ignored")
+  const logDir = path.join(root, "logs")
+  const out = collectingStream()
+  const err = collectingStream()
+
+  const result = await runAgentBatch({
+    args: [fixture("stderr-writer.js")],
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logStderrOnly: true,
+    logger: silentLogger,
+    prefixOutputLines: false,
+    promptFile,
+    runs: 1,
+    stderr: err.stream,
+    stdout: out.stream
+  })
+
+  assert.match(out.text(), /OUT-LINE/)
+  assert.doesNotMatch(err.text(), /ERR-LINE/) // suppressed from the live console
+
+  const log = await fs.readFile(result.results[0].logFile, "utf8")
+
+  assert.match(log, /ERR-LINE/) // but still captured in the per-run log
+  assert.match(log, /OUT-LINE/)
+})
+
 test("continues after a non-zero run and counts failures", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const promptFile = path.join(root, "prompt.md")
