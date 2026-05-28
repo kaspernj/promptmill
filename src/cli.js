@@ -8,7 +8,10 @@ import {DEFAULTS, OUTPUT_FORMATS} from "./defaults.js"
 import {integerOption} from "./helpers.js"
 import {runAgentBatch} from "./run-agent-batch.js"
 import {terminateChild} from "./run-agent-process.js"
+import {deriveSessionUuid, readSessionMapping} from "./session.js"
 import {createStopController} from "./stop-controller.js"
+
+const DEFAULT_SESSION_NAME = "promptmill"
 
 const AWESOMETASKS_TARGET_PLACEHOLDER = "{{AWESOMETASKS_TARGET}}"
 const BUNDLED_AWESOMETASKS_PROMPT = fileURLToPath(new URL("./prompts/awesometasks.md", import.meta.url))
@@ -42,6 +45,11 @@ Options:
                          JSON events; text prints only each run's final result.
   --log-file-prefix <s>  Per-run log filename prefix (default per agent)
   --label <s>            Console banner label (default: the agent's name)
+  --session-id <name>    Logical session name reused across runs and invocations so
+                         the agent resumes the same session each time (default
+                         "${DEFAULT_SESSION_NAME}"). For Claude/Gemini it is hashed into a
+                         deterministic UUID; for Codex/Antigravity the captured
+                         agent-side id is persisted in <log-dir>/sessions.json.
   --no-line-prefix       Do not prefix each output line with "[run N/total] "
   -h, --help             Show this help
 
@@ -67,6 +75,7 @@ Precedence for runs/max-turns/log-dir: flag > env var > default.
  * @property {string | null} model - Model override (null = the agent's default-highest).
  * @property {string | null} level - Reasoning-level override (null = the agent's default-highest).
  * @property {boolean} prefixOutputLines - Whether to prefix output lines with the run indicator.
+ * @property {string} sessionName - Logical session name (default "promptmill") reused across runs and invocations.
  * @property {string[]} passthroughArgs - Arguments after "--".
  */
 
@@ -98,7 +107,8 @@ export function parseCliOptions(argv, env = process.env) {
     prefixOutputLines: true,
     passthroughArgs: [],
     promptFile: null,
-    runsRaw: env.RUNS || String(DEFAULTS.runs)
+    runsRaw: env.RUNS || String(DEFAULTS.runs),
+    sessionName: DEFAULT_SESSION_NAME
   }
 
   for (let index = 0; index < args.length; index += 1) {
@@ -163,6 +173,8 @@ export function parseCliOptions(argv, env = process.env) {
         options.level = value
       } else if (arg === "--awesometasks") {
         options.awesometasksTarget = value
+      } else if (arg === "--session-id") {
+        options.sessionName = value
       } else {
         options.error = `Unknown option: ${arg}.`
         return options
@@ -279,6 +291,16 @@ export async function runCli(argv) {
   const effectiveModel = options.model ?? agent.defaultModel ?? null
   const effectiveLevel = options.level ?? agent.defaultLevel ?? null
 
+  const resolvedLogDir = path.resolve(options.cwd, options.logDir ?? agent.logDir)
+  const sessionMapping = readSessionMapping(resolvedLogDir)
+
+  /** @type {import("./agents.js").SessionInfo} */
+  const session = {
+    capturedId: sessionMapping[options.sessionName] ?? null,
+    name: options.sessionName,
+    uuid: deriveSessionUuid(options.sessionName)
+  }
+
   if (effectiveModel) {
     process.stdout.write(`Model: ${effectiveModel}\n`)
   }
@@ -288,6 +310,7 @@ export async function runCli(argv) {
   if (options.awesometasksTarget !== null) {
     process.stdout.write(`AwesomeTasks target: ${options.awesometasksTarget}\n`)
   }
+  process.stdout.write(`Session: ${session.name} (${session.uuid})\n`)
 
   /** @type {import("node:child_process").ChildProcess | null} */
   let activeChild = null
@@ -309,10 +332,11 @@ export async function runCli(argv) {
   const outputFormat = options.outputFormat
 
   const result = await runAgentBatch({
-    args: (turns) => agent.buildArgs(turns, outputFormat, [...modelLevelArgs, ...passthroughArgs]),
+    args: (turns, sessionInfo) => agent.buildArgs(turns, outputFormat, [...modelLevelArgs, ...passthroughArgs], sessionInfo),
     command: options.command ?? agent.command,
     createRenderer: outputFormat === "pretty" ? agent.createRenderer : undefined,
     cwd: options.cwd,
+    extractSessionId: agent.extractSessionId,
     logStderrOnly: outputFormat === "text" && agent.textProgressOnStderr === true,
     label: options.label ?? agent.label,
     logDir: options.logDir ?? agent.logDir,
@@ -324,6 +348,7 @@ export async function runCli(argv) {
     prefixOutputLines: options.prefixOutputLines,
     ...(promptText === null ? {promptFile} : {promptText}),
     runs,
+    session,
     shouldStop: stopController.shouldStop
   })
 

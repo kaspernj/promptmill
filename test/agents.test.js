@@ -34,7 +34,7 @@ test("the claude agent has Claude defaults", () => {
 })
 
 test("claude.buildArgs maps pretty to stream-json with --verbose and includes --max-turns", () => {
-  const args = getAgent("claude").buildArgs(80, "pretty", [])
+  const args = getAgent("claude").buildArgs(80, "pretty", [], null)
 
   assert.equal(valueAfter(args, "--output-format"), "stream-json")
   assert.ok(args.includes("--verbose"))
@@ -52,7 +52,7 @@ test("the gemini agent has Gemini defaults", () => {
 })
 
 test("gemini.buildArgs uses approval-mode yolo and stream-json, without claude-only flags", () => {
-  const args = getAgent("gemini").buildArgs(80, "pretty", [])
+  const args = getAgent("gemini").buildArgs(80, "pretty", [], null)
 
   assert.equal(valueAfter(args, "--approval-mode"), "yolo")
   assert.equal(valueAfter(args, "--output-format"), "stream-json")
@@ -62,8 +62,8 @@ test("gemini.buildArgs uses approval-mode yolo and stream-json, without claude-o
 })
 
 test("buildArgs appends passthrough args for both agents", () => {
-  assert.deepEqual(getAgent("gemini").buildArgs(80, "text", ["-m", "gemini-2.5-pro"]).slice(-2), ["-m", "gemini-2.5-pro"])
-  assert.deepEqual(getAgent("claude").buildArgs(80, "text", ["--foo"]).slice(-1), ["--foo"])
+  assert.deepEqual(getAgent("gemini").buildArgs(80, "text", ["-m", "gemini-2.5-pro"], null).slice(-2), ["-m", "gemini-2.5-pro"])
+  assert.deepEqual(getAgent("claude").buildArgs(80, "text", ["--foo"], null).slice(-1), ["--foo"])
 })
 
 test("the codex agent has Codex defaults", () => {
@@ -83,7 +83,7 @@ test("only codex declares text-mode progress on stderr", () => {
 })
 
 test("codex.buildArgs runs `exec --json` with sandbox bypass, prompt via trailing stdin -", () => {
-  const args = getAgent("codex").buildArgs(80, "pretty", [])
+  const args = getAgent("codex").buildArgs(80, "pretty", [], null)
 
   assert.equal(args[0], "exec")
   assert.ok(args.includes("--json"))
@@ -93,11 +93,11 @@ test("codex.buildArgs runs `exec --json` with sandbox bypass, prompt via trailin
 })
 
 test("codex text mode omits --json and passthrough lands before the trailing -", () => {
-  const text = getAgent("codex").buildArgs(80, "text", [])
+  const text = getAgent("codex").buildArgs(80, "text", [], null)
 
   assert.ok(!text.includes("--json"))
 
-  const withModel = getAgent("codex").buildArgs(80, "pretty", ["-m", "gpt-5.1-codex"])
+  const withModel = getAgent("codex").buildArgs(80, "pretty", ["-m", "gpt-5.1-codex"], null)
 
   assert.deepEqual(withModel.slice(-3), ["-m", "gpt-5.1-codex", "-"]) // passthrough before stdin -
 })
@@ -139,11 +139,57 @@ test("the antigravity agent has Antigravity defaults and no renderer", () => {
 })
 
 test("antigravity.buildArgs runs `agy --print` with auto-approve regardless of output mode", () => {
-  const args = getAgent("antigravity").buildArgs(80, "pretty", [])
+  const args = getAgent("antigravity").buildArgs(80, "pretty", [], null)
 
   assert.ok(args.includes("--print"))
   assert.ok(args.includes("--dangerously-skip-permissions"))
   assert.ok(!args.includes("--max-turns"))
   // The output mode does not change agy's args (it has no JSON/output-format).
-  assert.deepEqual(getAgent("antigravity").buildArgs(80, "text", []), args)
+  assert.deepEqual(getAgent("antigravity").buildArgs(80, "text", [], null), args)
+})
+
+test("claude.buildArgs pins the session via --session-id <uuid> when session is given", () => {
+  const session = {capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
+  const args = getAgent("claude").buildArgs(80, "pretty", [], session)
+
+  assert.equal(valueAfter(args, "--session-id"), session.uuid)
+})
+
+test("gemini.buildArgs pins the session via --session-id <uuid> when session is given", () => {
+  const session = {capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
+  const args = getAgent("gemini").buildArgs(80, "pretty", [], session)
+
+  assert.equal(valueAfter(args, "--session-id"), session.uuid)
+})
+
+test("codex.buildArgs omits `resume` when capturedId is null and inserts it after exec when known", () => {
+  const fresh = {capturedId: null, name: "promptmill", uuid: "ignored-for-codex"}
+  const freshArgs = getAgent("codex").buildArgs(80, "pretty", [], fresh)
+
+  assert.equal(freshArgs[0], "exec")
+  assert.notEqual(freshArgs[1], "resume")
+
+  const resumed = {capturedId: "01ABCDEF-1234-5678-90AB-CDEF12345678", name: "promptmill", uuid: "ignored"}
+  const resumedArgs = getAgent("codex").buildArgs(80, "pretty", [], resumed)
+
+  assert.deepEqual(resumedArgs.slice(0, 3), ["exec", "resume", resumed.capturedId])
+})
+
+test("antigravity.buildArgs pins --conversation only when capturedId is known", () => {
+  const fresh = {capturedId: null, name: "promptmill", uuid: "ignored"}
+
+  assert.ok(!getAgent("antigravity").buildArgs(80, "pretty", [], fresh).includes("--conversation"))
+
+  const resumed = {capturedId: "conv-abc123", name: "promptmill", uuid: "ignored"}
+  const resumedArgs = getAgent("antigravity").buildArgs(80, "pretty", [], resumed)
+
+  assert.equal(valueAfter(resumedArgs, "--conversation"), "conv-abc123")
+})
+
+test("codex.extractSessionId parses thread.started events and ignores other JSON", () => {
+  const codex = getAgent("codex")
+
+  assert.equal(codex.extractSessionId?.('{"type":"thread.started","thread_id":"01J3X…"}'), "01J3X…")
+  assert.equal(codex.extractSessionId?.('{"type":"turn.completed"}'), null)
+  assert.equal(codex.extractSessionId?.("not json"), null)
 })

@@ -38,12 +38,14 @@ export const OUTPUT_FORMATS = ["pretty", "text", "json", "stream-json"]
  * which Claude requires in print mode. `text` and `json` are passed through.
  * @param {number} maxTurns - Maximum agent turns for the run.
  * @param {"pretty" | "text" | "json" | "stream-json"} [outputFormat] - promptmill output mode.
+ * @param {string[]} [sessionArgs] - Optional session-pinning args, prepended (e.g. `["--session-id", "<uuid>"]`).
  * @returns {string[]} - CLI arguments for the agent command.
  */
-export function defaultClaudeArgs(maxTurns, outputFormat = DEFAULTS.outputFormat) {
+export function defaultClaudeArgs(maxTurns, outputFormat = DEFAULTS.outputFormat, sessionArgs = []) {
   const claudeFormat = outputFormat === "pretty" ? "stream-json" : outputFormat
 
   return [
+    ...sessionArgs,
     "-p",
     "Follow the full instructions provided on stdin. Run autonomously. Do not ask questions. Do not wait for human input.",
     "--dangerously-skip-permissions",
@@ -83,12 +85,13 @@ export function ensureStreamJsonVerbose(args) {
  * `pretty` maps to `stream-json` (promptmill renders the events). Gemini has no
  * turn-limit CLI flag, so `maxTurns` does not apply.
  * @param {"pretty" | "text" | "json" | "stream-json"} [outputFormat] - promptmill output mode.
+ * @param {string[]} [sessionArgs] - Optional session-pinning args, prepended (e.g. `["--session-id", "<uuid>"]`).
  * @returns {string[]} - CLI arguments for the gemini command.
  */
-export function defaultGeminiArgs(outputFormat = DEFAULTS.outputFormat) {
+export function defaultGeminiArgs(outputFormat = DEFAULTS.outputFormat, sessionArgs = []) {
   const geminiFormat = outputFormat === "pretty" ? "stream-json" : outputFormat
 
-  return ["--approval-mode", "yolo", "--output-format", geminiFormat]
+  return [...sessionArgs, "--approval-mode", "yolo", "--output-format", geminiFormat]
 }
 
 /**
@@ -100,10 +103,15 @@ export function defaultGeminiArgs(outputFormat = DEFAULTS.outputFormat) {
  * through raw. Codex has no single-object JSON or turn-limit flag.
  * @param {"pretty" | "text" | "json" | "stream-json"} [outputFormat] - promptmill output mode.
  * @param {string[]} [passthroughArgs] - Extra args, inserted before the trailing stdin `-`.
+ * @param {string[]} [resumeArgs] - Resume sub-subcommand args (e.g. `["resume", "<id>"]`), inserted immediately after `exec`.
  * @returns {string[]} - CLI arguments for the codex command.
  */
-export function defaultCodexArgs(outputFormat = DEFAULTS.outputFormat, passthroughArgs = []) {
-  const base = ["exec", ...(outputFormat === "text" ? [] : ["--json"]), "--dangerously-bypass-approvals-and-sandbox"]
+export function defaultCodexArgs(outputFormat = DEFAULTS.outputFormat, passthroughArgs = [], resumeArgs = []) {
+  // `codex exec resume <id>` resumes a previous session — the resume sub-subcommand
+  // must come immediately after `exec`. When there's no captured id yet (or no
+  // session at all), resumeArgs is empty and `codex exec` starts a fresh session
+  // whose id we'll capture from the `--json` stream's `thread.started` event.
+  const base = ["exec", ...resumeArgs, ...(outputFormat === "text" ? [] : ["--json"]), "--dangerously-bypass-approvals-and-sandbox"]
 
   return [...base, ...passthroughArgs, "-"]
 }
@@ -116,8 +124,9 @@ export function defaultCodexArgs(outputFormat = DEFAULTS.outputFormat, passthrou
  * short. Antigravity has no JSON/event output or turn-limit flag, so the
  * promptmill output mode does not change its arguments.
  * @param {string[]} [passthroughArgs] - Extra args, appended (can override the timeout).
+ * @param {string[]} [sessionArgs] - Optional session-pinning args, prepended (e.g. `["--conversation", "<id>"]`).
  * @returns {string[]} - CLI arguments for the agy command.
  */
-export function defaultAntigravityArgs(passthroughArgs = []) {
-  return ["--print", "--dangerously-skip-permissions", "--print-timeout", "1h", ...passthroughArgs]
+export function defaultAntigravityArgs(passthroughArgs = [], sessionArgs = []) {
+  return [...sessionArgs, "--print", "--dangerously-skip-permissions", "--print-timeout", "1h", ...passthroughArgs]
 }

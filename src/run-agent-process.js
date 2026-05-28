@@ -74,9 +74,10 @@ function createLinePrefixer(prefix, sinks) {
  * @param {CreateRenderer} [args.createRenderer] - Builds a stdout writer that renders the agent's stream-json into readable lines (the `pretty` mode).
  * @param {boolean} [args.logStderrOnly] - Send the child's stderr to the log only, not the live console (e.g. an agent that streams progress to stderr in a "final result only" mode).
  * @param {(child: import("node:child_process").ChildProcess) => void} [args.onSpawn] - Receives the spawned child.
+ * @param {(line: string) => void} [args.onStdoutLine] - Optional tap fired for each completed raw stdout line (before renderer/prefixer). Used to capture agent-assigned session ids from stream events.
  * @returns {Promise<AgentRunStatus>} - Resolves with the run status.
  */
-export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", createRenderer, logStderrOnly = false, onSpawn}) {
+export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", createRenderer, logStderrOnly = false, onSpawn, onStdoutLine}) {
   return new Promise((resolve) => {
     // `detached` puts the child in its own process group, so a terminal Ctrl+C
     // (SIGINT to the foreground group) does not reach it — promptmill decides
@@ -96,7 +97,28 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
       : (linePrefix ? createLinePrefixer(linePrefix, [stdout, logStream]) : null)
     const errPrefixer = linePrefix ? createLinePrefixer(linePrefix, errSinks) : null
 
+    // Side-tap for onStdoutLine: split raw stdout into lines and notify the
+    // caller for each one. Independent of the renderer so it works in every
+    // output mode (pretty/json/stream-json/text).
+    let tapBuffer = ""
+
+    /** @param {Buffer | string} chunk - Raw stdout chunk to inspect. */
+    function tapStdout(chunk) {
+      if (!onStdoutLine) return
+
+      tapBuffer += String(chunk)
+      let newlineIndex = tapBuffer.indexOf("\n")
+
+      while (newlineIndex !== -1) {
+        onStdoutLine(tapBuffer.slice(0, newlineIndex))
+        tapBuffer = tapBuffer.slice(newlineIndex + 1)
+        newlineIndex = tapBuffer.indexOf("\n")
+      }
+    }
+
     child.stdout?.on("data", (chunk) => {
+      tapStdout(chunk)
+
       if (outWriter) {
         outWriter.write(chunk)
       } else {
@@ -122,6 +144,11 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
     function flushPrefixers() {
       outWriter?.flush()
       errPrefixer?.flush()
+
+      if (onStdoutLine && tapBuffer.length > 0) {
+        onStdoutLine(tapBuffer)
+        tapBuffer = ""
+      }
     }
 
     child.on("error", (error) => {

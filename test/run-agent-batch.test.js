@@ -214,6 +214,55 @@ test("logStderrOnly keeps the child's stderr off the live console but in the log
   assert.match(log, /OUT-LINE/)
 })
 
+test("captures the agent's session id from the stdout stream and writes it to sessions.json", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+  const session = {capturedId: null, name: "promptmill", uuid: "ignored-by-fake-codex"}
+
+  /** @type {string[][]} */
+  const argsPerRun = []
+  await runAgentBatch({
+    args: (_turns, sessionInfo) => {
+      // The factory is called once per run with the current session info; record
+      // both calls so we can assert the second run sees the captured id.
+      const resumeArgs = sessionInfo?.capturedId ? ["resume", sessionInfo.capturedId] : []
+      const argsForRun = [fixture("codex-thread.js"), ...resumeArgs]
+      argsPerRun.push(argsForRun)
+
+      return argsForRun
+    },
+    command: process.execPath,
+    cwd: root,
+    extractSessionId: (line) => {
+      try {
+        const event = JSON.parse(line)
+
+        return event?.type === "thread.started" && typeof event.thread_id === "string" ? event.thread_id : null
+      } catch {
+        return null
+      }
+    },
+    logDir,
+    logger: silentLogger,
+    promptText: "ignored",
+    runs: 2,
+    session,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  assert.equal(session.capturedId, "FAKE-THREAD-001")
+
+  const persisted = JSON.parse(await fs.readFile(path.join(logDir, "sessions.json"), "utf8"))
+
+  assert.deepEqual(persisted, {promptmill: "FAKE-THREAD-001"})
+
+  // Run 1 had no captured id yet; run 2 should have been spawned with resume.
+  assert.deepEqual(argsPerRun[0].slice(1), [])
+  assert.deepEqual(argsPerRun[1].slice(1), ["resume", "FAKE-THREAD-001"])
+})
+
 test("promptText is used in place of reading from promptFile", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const logDir = path.join(root, "logs")

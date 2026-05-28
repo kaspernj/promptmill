@@ -151,6 +151,15 @@ test("a missing prompt file is flagged without throwing", () => {
   assert.match(String(options.error), /Missing required <prompt-file> argument\./)
 })
 
+test("--session-id parses and defaults to \"promptmill\"", () => {
+  const defaults = parse(["prompt.md"])
+  assert.equal(defaults.sessionName, "promptmill")
+
+  const overridden = parse(["prompt.md", "--session-id", "project-a"])
+  assert.equal(overridden.error, null)
+  assert.equal(overridden.sessionName, "project-a")
+})
+
 test("--awesometasks makes the positional <prompt-file> optional", () => {
   const options = parse(["--awesometasks", "https://tasks.diestoeckels.de/boards/42"])
 
