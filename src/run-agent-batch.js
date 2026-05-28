@@ -5,6 +5,7 @@ import path from "node:path"
 import {defaultClaudeArgs} from "./defaults.js"
 import {buildLogFileName, timestampForLogFile} from "./helpers.js"
 import {spawnAgentRun} from "./run-agent-process.js"
+import {readSessionMapping, writeSessionMapping} from "./session.js"
 
 /**
  * @typedef {object} AgentRunResult
@@ -30,7 +31,9 @@ import {spawnAgentRun} from "./run-agent-process.js"
  * @property {number} [maxTurns] - Maximum agent turns per run (passed to the default args).
  * @property {string} [logDir] - Directory for per-run log files.
  * @property {string} [command] - Agent executable to spawn.
- * @property {string[] | ((maxTurns: number) => string[])} [args] - Args for the command, or a factory.
+ * @property {string[] | ((maxTurns: number, session: import("./agents.js").SessionInfo | null) => string[])} [args] - Args for the command, or a factory invoked once per run with the current session info.
+ * @property {import("./agents.js").SessionInfo} [session] - Shared session info reused across runs and invocations; mutated in-place when a capturedId is discovered.
+ * @property {(line: string) => string | null} [extractSessionId] - Parses one raw stdout line and returns the agent's session id when present.
  * @property {string} [cwd] - Working directory for spawns and log-dir resolution.
  * @property {string} [logFilePrefix] - Per-run log filename prefix.
  * @property {string} [label] - Console banner label.
@@ -70,7 +73,9 @@ export async function runAgentBatch(options) {
     stderr = process.stderr,
     logger = console,
     shouldStop = () => false,
-    onSpawn
+    onSpawn,
+    session,
+    extractSessionId
   } = options
 
   if (promptText === undefined && promptFile === undefined) {
@@ -79,9 +84,7 @@ export async function runAgentBatch(options) {
 
   const resolvedPromptFile = promptFile === undefined ? null : path.resolve(cwd, promptFile)
   const resolvedLogDir = path.resolve(cwd, logDir)
-  const commandArgs = typeof args === "function"
-    ? args(maxTurns)
-    : (args ?? defaultClaudeArgs(maxTurns))
+  const sessionInfo = session ?? null
 
   fs.mkdirSync(resolvedLogDir, {recursive: true})
 
@@ -105,6 +108,21 @@ export async function runAgentBatch(options) {
 
     const prompt = promptText ?? fs.readFileSync(/** @type {string} */ (resolvedPromptFile), "utf8")
     const logStream = fs.createWriteStream(logFile, {flags: "a"})
+    const commandArgs = typeof args === "function"
+      ? args(maxTurns, sessionInfo)
+      : (args ?? defaultClaudeArgs(maxTurns))
+
+    /** @type {string | null} */
+    let newlyCapturedId = null
+    const onStdoutLine = extractSessionId && sessionInfo && sessionInfo.capturedId === null
+      ? (/** @type {string} */ line) => {
+        if (newlyCapturedId !== null) return
+
+        const candidate = extractSessionId(line)
+        if (candidate) newlyCapturedId = candidate
+      }
+      : undefined
+
     const status = await spawnAgentRun({
       args: commandArgs,
       command,
@@ -114,10 +132,18 @@ export async function runAgentBatch(options) {
       logStderrOnly,
       logStream,
       onSpawn,
+      onStdoutLine,
       prompt,
       stderr,
       stdout
     })
+
+    if (newlyCapturedId !== null && sessionInfo !== null) {
+      sessionInfo.capturedId = newlyCapturedId
+      const mapping = readSessionMapping(resolvedLogDir)
+      mapping[sessionInfo.name] = newlyCapturedId
+      writeSessionMapping(resolvedLogDir, mapping)
+    }
 
     if (status.code === 0) {
       writeToBoth(stdout, logStream, `\n${label} run ${runNumber}/${runs} finished successfully.\n`)

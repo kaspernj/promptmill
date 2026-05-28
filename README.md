@@ -38,6 +38,7 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 | `--output-format <fmt>` | `pretty` | | Output mode: `pretty` (live readable progress), `text` (final result only), `json`, or `stream-json` (raw JSON events) |
 | `--log-file-prefix <s>` | per agent | | Per-run log filename prefix |
 | `--label <s>` | the agent's | | Console banner label |
+| `--session-id <name>` | `promptmill` | | Logical session name reused across runs and invocations so the agent resumes the same session each time. See [Sessions](#sessions). |
 | `--no-line-prefix` | (prefix on) | | Don't prefix each output line with `[run N/total] ` |
 | `-h`, `--help` | | | Show help |
 
@@ -79,6 +80,23 @@ promptmill prompts/my-prompt.md --agent antigravity --runs 25
 **Stopping:** press Ctrl+C once for a **graceful stop** — the current run finishes, the next one is skipped, and promptmill exits. Press Ctrl+C **again** to interrupt the current run and exit immediately.
 
 Exit codes: `0` all runs finished · `1` fatal (missing prompt file, invalid `runs`/`max-turns`, or an unexpected error) · `130` stopped with Ctrl-C (SIGINT/SIGTERM), gracefully or interrupted. A run that exits non-zero does **not** fail the batch.
+
+## Sessions
+
+By default every promptmill run — and every invocation — resumes the same agent session, named `promptmill`. The first run starts a fresh session; subsequent runs (within the batch and across invocations) continue it, so the agent keeps the memory it built up. Override the name with `--session-id <name>` to keep unrelated batches isolated:
+
+```sh
+promptmill prompts/feature-a.md --session-id feature-a
+promptmill prompts/feature-b.md --session-id feature-b
+```
+
+Per-agent details:
+
+- **Claude** and **Gemini** pin the session via `--session-id <uuid>`. Promptmill derives a deterministic UUID v5 from the session name, so the same name always resolves to the same UUID across machines and time.
+- **Codex** cannot pin a session id up front. Promptmill runs `codex exec` fresh on first use, captures the assigned thread id from the `--json` stream's `thread.started` event, persists it to `<log-dir>/sessions.json`, and uses `codex exec resume <id>` for every subsequent run (in this batch and future invocations).
+- **Antigravity** is best-effort. Promptmill scans `agy --print` output for a recognizable conversation id; if found it is persisted and reused via `--conversation <id>`, otherwise each run starts fresh.
+
+The session UUID is printed at startup (`Session: promptmill (b8c4… )`). Delete `<log-dir>/sessions.json` to force a fresh session for the Codex/Antigravity flow.
 
 ## AwesomeTasks mode
 
