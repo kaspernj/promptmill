@@ -1,6 +1,6 @@
 {
   "name": "promptmill",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Run an agent prompt repeatedly in a batch loop, tee-ing each run to the console and a per-run log file.",
   "keywords": [
     "claude",
