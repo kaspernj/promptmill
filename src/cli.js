@@ -269,10 +269,12 @@ export async function runCli(argv) {
     return 1
   }
 
-  let promptText = fs.readFileSync(promptFile, "utf8")
-  if (options.awesometasksTarget !== null) {
-    promptText = promptText.split(AWESOMETASKS_TARGET_PLACEHOLDER).join(options.awesometasksTarget)
-  }
+  // Only pre-read the prompt when we need to substitute the AwesomeTasks target.
+  // Otherwise runAgentBatch keeps re-reading the file each run, so users can edit
+  // the prompt mid-batch.
+  const promptText = options.awesometasksTarget === null
+    ? null
+    : fs.readFileSync(promptFile, "utf8").split(AWESOMETASKS_TARGET_PLACEHOLDER).join(options.awesometasksTarget)
 
   const effectiveModel = options.model ?? agent.defaultModel ?? null
   const effectiveLevel = options.level ?? agent.defaultLevel ?? null
@@ -320,7 +322,7 @@ export async function runCli(argv) {
       activeChild = child
     },
     prefixOutputLines: options.prefixOutputLines,
-    promptText,
+    ...(promptText === null ? {promptFile} : {promptText}),
     runs,
     shouldStop: stopController.shouldStop
   })
