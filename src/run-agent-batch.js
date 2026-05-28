@@ -24,7 +24,8 @@ import {spawnAgentRun} from "./run-agent-process.js"
 
 /**
  * @typedef {object} RunAgentBatchOptions
- * @property {string} promptFile - Absolute or cwd-relative path to the prompt file.
+ * @property {string} [promptFile] - Absolute or cwd-relative path to the prompt file. Required unless `promptText` is given.
+ * @property {string} [promptText] - Pre-rendered prompt text. Overrides `promptFile` when set; no file read happens.
  * @property {number} [runs] - Number of runs to perform.
  * @property {number} [maxTurns] - Maximum agent turns per run (passed to the default args).
  * @property {string} [logDir] - Directory for per-run log files.
@@ -53,6 +54,7 @@ import {spawnAgentRun} from "./run-agent-process.js"
 export async function runAgentBatch(options) {
   const {
     promptFile,
+    promptText,
     runs = 100,
     maxTurns = 80,
     logDir = ".claude-runs",
@@ -71,7 +73,11 @@ export async function runAgentBatch(options) {
     onSpawn
   } = options
 
-  const resolvedPromptFile = path.resolve(cwd, promptFile)
+  if (promptText === undefined && promptFile === undefined) {
+    throw new Error("runAgentBatch requires either promptFile or promptText.")
+  }
+
+  const resolvedPromptFile = promptFile === undefined ? null : path.resolve(cwd, promptFile)
   const resolvedLogDir = path.resolve(cwd, logDir)
   const commandArgs = typeof args === "function"
     ? args(maxTurns)
@@ -97,7 +103,7 @@ export async function runAgentBatch(options) {
     logger.log(`\n===== ${label} run ${runNumber}/${runs} =====`)
     logger.log(`Log: ${logFileDisplay}\n`)
 
-    const prompt = fs.readFileSync(resolvedPromptFile, "utf8")
+    const prompt = promptText ?? fs.readFileSync(/** @type {string} */ (resolvedPromptFile), "utf8")
     const logStream = fs.createWriteStream(logFile, {flags: "a"})
     const status = await spawnAgentRun({
       args: commandArgs,

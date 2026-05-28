@@ -1,6 +1,7 @@
 // @ts-check
 import fs from "node:fs"
 import path from "node:path"
+import {fileURLToPath} from "node:url"
 
 import {AGENT_NAMES, getAgent} from "./agents.js"
 import {DEFAULTS, OUTPUT_FORMATS} from "./defaults.js"
@@ -9,14 +10,24 @@ import {runAgentBatch} from "./run-agent-batch.js"
 import {terminateChild} from "./run-agent-process.js"
 import {createStopController} from "./stop-controller.js"
 
-const HELP_TEXT = `Usage: promptmill <prompt-file> [options] [-- <agent args...>]
+const AWESOMETASKS_TARGET_PLACEHOLDER = "{{AWESOMETASKS_TARGET}}"
+const BUNDLED_AWESOMETASKS_PROMPT = fileURLToPath(new URL("./prompts/awesometasks.md", import.meta.url))
 
-Runs an agent command repeatedly against a prompt file, tee-ing each run to the
-console and a per-run log file.
+const HELP_TEXT = `Usage: promptmill <prompt-file> [options] [-- <agent args...>]
+       promptmill --awesometasks <id-or-url> [<prompt-file>] [options] [-- <agent args...>]
+
+Runs an agent command repeatedly, tee-ing each run to the console and a per-run
+log file. Default mode reads a prompt file; AwesomeTasks mode points the agent
+at a board on tasks.diestoeckels.de.
 
 Options:
   --agent <name>         Agent to run: ${AGENT_NAMES.join(" | ")} (default ${DEFAULTS.agent}).
                          Sets the default command, label, and log dir.
+  --awesometasks <t>     AwesomeTasks mode. <t> is a board/project id, project name,
+                         or board URL — forwarded verbatim into the prompt. Uses
+                         the shipped src/prompts/awesometasks.md unless an explicit
+                         <prompt-file> is also given (then "{{AWESOMETASKS_TARGET}}"
+                         in that file is substituted with <t>).
   --runs <n>             Number of runs (default ${DEFAULTS.runs}, min 0). Env: RUNS
   --max-turns <n>        Max agent turns per run (Claude only; default ${DEFAULTS.maxTurns}, min 1). Env: MAX_TURNS
   --log-dir <path>       Per-run log directory (default per agent, e.g. .claude-runs / .gemini-runs). Env: LOG_DIR
@@ -43,6 +54,7 @@ Precedence for runs/max-turns/log-dir: flag > env var > default.
  * @property {boolean} help - Whether help was requested.
  * @property {string | null} error - Parse error message, when invalid.
  * @property {string | null} promptFile - Positional prompt-file path.
+ * @property {string | null} awesometasksTarget - AwesomeTasks board/project/URL target, or null.
  * @property {string} agent - Selected agent name.
  * @property {string} runsRaw - Raw runs value (flag or env).
  * @property {string} maxTurnsRaw - Raw max-turns value (flag or env).
@@ -71,6 +83,7 @@ export function parseCliOptions(argv, env = process.env) {
   /** @type {CliOptions} */
   const options = {
     agent: DEFAULTS.agent,
+    awesometasksTarget: null,
     command: null,
     cwd: process.cwd(),
     error: null,
@@ -148,6 +161,8 @@ export function parseCliOptions(argv, env = process.env) {
         options.model = value
       } else if (arg === "--level") {
         options.level = value
+      } else if (arg === "--awesometasks") {
+        options.awesometasksTarget = value
       } else {
         options.error = `Unknown option: ${arg}.`
         return options
@@ -164,7 +179,7 @@ export function parseCliOptions(argv, env = process.env) {
     }
   }
 
-  if (!options.help && options.promptFile === null) {
+  if (!options.help && options.promptFile === null && options.awesometasksTarget === null) {
     options.error = "Missing required <prompt-file> argument."
   }
 
@@ -245,11 +260,18 @@ export async function runCli(argv) {
     return 1
   }
 
-  const promptFile = path.resolve(options.cwd, /** @type {string} */ (options.promptFile))
+  const promptFile = options.promptFile === null
+    ? BUNDLED_AWESOMETASKS_PROMPT
+    : path.resolve(options.cwd, options.promptFile)
 
   if (!fs.existsSync(promptFile)) {
     process.stderr.write(`Missing prompt file: ${promptFile}\n`)
     return 1
+  }
+
+  let promptText = fs.readFileSync(promptFile, "utf8")
+  if (options.awesometasksTarget !== null) {
+    promptText = promptText.split(AWESOMETASKS_TARGET_PLACEHOLDER).join(options.awesometasksTarget)
   }
 
   const effectiveModel = options.model ?? agent.defaultModel ?? null
@@ -260,6 +282,9 @@ export async function runCli(argv) {
   }
   if (effectiveLevel) {
     process.stdout.write(`Level: ${effectiveLevel}\n`)
+  }
+  if (options.awesometasksTarget !== null) {
+    process.stdout.write(`AwesomeTasks target: ${options.awesometasksTarget}\n`)
   }
 
   /** @type {import("node:child_process").ChildProcess | null} */
@@ -295,7 +320,7 @@ export async function runCli(argv) {
       activeChild = child
     },
     prefixOutputLines: options.prefixOutputLines,
-    promptFile,
+    promptText,
     runs,
     shouldStop: stopController.shouldStop
   })

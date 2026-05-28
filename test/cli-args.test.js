@@ -151,6 +151,28 @@ test("a missing prompt file is flagged without throwing", () => {
   assert.match(String(options.error), /Missing required <prompt-file> argument\./)
 })
 
+test("--awesometasks makes the positional <prompt-file> optional", () => {
+  const options = parse(["--awesometasks", "https://tasks.diestoeckels.de/boards/42"])
+
+  assert.equal(options.error, null)
+  assert.equal(options.promptFile, null)
+  assert.equal(options.awesometasksTarget, "https://tasks.diestoeckels.de/boards/42")
+})
+
+test("--awesometasks with an explicit prompt file keeps both", () => {
+  const options = parse(["custom-prompt.md", "--awesometasks", "Auraline"])
+
+  assert.equal(options.error, null)
+  assert.equal(options.promptFile, "custom-prompt.md")
+  assert.equal(options.awesometasksTarget, "Auraline")
+})
+
+test("missing both prompt file and --awesometasks still errors", () => {
+  const options = parse(["--runs", "1"])
+
+  assert.match(String(options.error), /Missing required <prompt-file> argument\./)
+})
+
 test("an unknown option is reported", () => {
   const options = parse(["prompt.md", "--nope", "x"])
 

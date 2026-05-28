@@ -214,6 +214,39 @@ test("logStderrOnly keeps the child's stderr off the live console but in the log
   assert.match(log, /OUT-LINE/)
 })
 
+test("promptText is used in place of reading from promptFile", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+
+  const result = await runAgentBatch({
+    args: [fixture("echo-stdin.js")],
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    promptText: "INLINE-PROMPT-CONTENT-9876",
+    runs: 1,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  assert.equal(result.failures, 0)
+  assert.match(captured.text(), /INLINE-PROMPT-CONTENT-9876/)
+})
+
+test("runAgentBatch errors when neither promptFile nor promptText is supplied", async () => {
+  await assert.rejects(
+    runAgentBatch({
+      args: [fixture("echo-stdin.js")],
+      command: process.execPath,
+      logger: silentLogger,
+      runs: 1
+    }),
+    /promptFile or promptText/
+  )
+})
+
 test("continues after a non-zero run and counts failures", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const promptFile = path.join(root, "prompt.md")

@@ -27,6 +27,7 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 | Option | Default | Env | Description |
 | --- | --- | --- | --- |
 | `--agent <name>` | `claude` | | Agent to run: `claude`, `gemini`, `codex`, or `antigravity`. Sets the default command, label, and log dir. |
+| `--awesometasks <t>` | — | | AwesomeTasks mode. `<t>` is a board/project id, project name, or board URL on `tasks.diestoeckels.de`. The positional `<prompt-file>` becomes optional; without one Promptmill uses its shipped default prompt. Either way, `{{AWESOMETASKS_TARGET}}` in the prompt is replaced with `<t>` before the agent runs. See [AwesomeTasks mode](#awesometasks-mode). |
 | `--runs <n>` | `100` (min 0) | `RUNS` | Number of runs |
 | `--max-turns <n>` | `80` (min 1) | `MAX_TURNS` | Max agent turns per run (**Claude only** — Gemini has no turn-limit flag) |
 | `--log-dir <path>` | per agent | `LOG_DIR` | Per-run log directory (`.claude-runs` / `.gemini-runs`) |
@@ -78,6 +79,24 @@ promptmill prompts/my-prompt.md --agent antigravity --runs 25
 **Stopping:** press Ctrl+C once for a **graceful stop** — the current run finishes, the next one is skipped, and promptmill exits. Press Ctrl+C **again** to interrupt the current run and exit immediately.
 
 Exit codes: `0` all runs finished · `1` fatal (missing prompt file, invalid `runs`/`max-turns`, or an unexpected error) · `130` stopped with Ctrl-C (SIGINT/SIGTERM), gracefully or interrupted. A run that exits non-zero does **not** fail the batch.
+
+## AwesomeTasks mode
+
+Point Promptmill at an AwesomeTasks board on `tasks.diestoeckels.de` instead of giving it a prompt file. The agent (which needs its own `awesometasks` skill / tooling) picks scoped Backlog tasks, moves each to Doing, implements, opens a PR, moves it to Review, and comments the result.
+
+```sh
+promptmill --awesometasks https://tasks.diestoeckels.de/boards/42 --agent codex --runs 1
+```
+
+`--awesometasks` accepts a board id, project id, project name, or a board URL — the value is forwarded verbatim into the prompt as `{{AWESOMETASKS_TARGET}}` and the agent's skill resolves it against the live API. Each Promptmill run drains every in-scope Backlog task it can find; `--runs N` just repeats the cycle (useful for polling).
+
+The shipped prompt lives at [`src/prompts/awesometasks.md`](src/prompts/awesometasks.md). To use your own instead, pass it as the positional argument — `{{AWESOMETASKS_TARGET}}` placeholders are still substituted:
+
+```sh
+promptmill prompts/my-awesometasks-worker.md --awesometasks 113 --agent codex
+```
+
+The agent needs valid AwesomeTasks credentials in its environment (see the `awesometasks` skill for the token lookup order). Promptmill itself never touches the API.
 
 ## Output
 
