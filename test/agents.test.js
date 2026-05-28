@@ -186,6 +186,23 @@ test("antigravity.buildArgs pins --conversation only when capturedId is known", 
   assert.equal(valueAfter(resumedArgs, "--conversation"), "conv-abc123")
 })
 
+test("codex.buildArgs forces --json in text mode when a session id still needs capturing", () => {
+  const session = {capturedId: null, name: "promptmill", uuid: "ignored"}
+  const args = getAgent("codex").buildArgs(80, "text", [], session)
+
+  // Without --json the extractor would never see thread.started; force it on
+  // for the first capture run even though the user picked text mode.
+  assert.ok(args.includes("--json"))
+})
+
+test("codex.buildArgs honors text mode once the session id is captured", () => {
+  const session = {capturedId: "FAKE-THREAD", name: "promptmill", uuid: "ignored"}
+  const args = getAgent("codex").buildArgs(80, "text", [], session)
+
+  // Already captured — no reason to override the user's chosen format.
+  assert.ok(!args.includes("--json"))
+})
+
 test("codex.extractSessionId parses thread.started events and ignores other JSON", () => {
   const codex = getAgent("codex")
 

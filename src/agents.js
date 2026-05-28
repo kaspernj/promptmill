@@ -92,11 +92,16 @@ const codex = {
   // `codex exec` reads the prompt from stdin (trailing -); no turn-limit flag.
   // When we have a captured Codex session id, prepend `resume <id>` so the agent
   // resumes that thread. Otherwise start fresh — we'll capture the new id from
-  // the `--json` stream's thread.started event.
+  // the `--json` stream's thread.started event. In `text` mode `--json` is
+  // normally omitted, but the extractor only sees thread.started in the JSON
+  // stream, so we force `--json` for the first capture run. Subsequent runs
+  // already have the id and honor the user's chosen output format.
   buildArgs: (_maxTurns, outputFormat, passthroughArgs, session) => {
     const resumeArgs = session?.capturedId ? ["resume", session.capturedId] : []
+    const needsCapture = session !== null && session.capturedId === null
+    const effectiveFormat = needsCapture && outputFormat === "text" ? "json" : outputFormat
 
-    return defaultCodexArgs(outputFormat, passthroughArgs, resumeArgs)
+    return defaultCodexArgs(effectiveFormat, passthroughArgs, resumeArgs)
   },
   extractSessionId: (line) => {
     if (!line.includes("thread.started")) return null

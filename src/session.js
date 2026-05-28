@@ -68,7 +68,15 @@ export function readSessionMapping(logDir) {
   if (!fs.existsSync(filePath)) return {}
 
   const raw = fs.readFileSync(filePath, "utf8")
-  const parsed = JSON.parse(raw)
+
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    // Malformed JSON (manual edit, truncated write) is treated like a missing
+    // file so the run isn't blocked. Next successful capture overwrites it.
+    return {}
+  }
 
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return {}
 

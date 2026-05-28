@@ -35,6 +35,14 @@ test("writeSessionMapping persists and readSessionMapping reads it back", async 
   assert.deepEqual(readSessionMapping(dir), {promptmill: "captured-123", "project-a": "captured-456"})
 })
 
+test("readSessionMapping returns an empty object when the file is malformed JSON", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-session-"))
+
+  await fs.writeFile(path.join(dir, "sessions.json"), "{not valid json")
+
+  assert.deepEqual(readSessionMapping(dir), {})
+})
+
 test("readSessionMapping drops non-string values defensively", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-session-"))
 
