@@ -148,18 +148,39 @@ test("antigravity.buildArgs runs `agy --print` with auto-approve regardless of o
   assert.deepEqual(getAgent("antigravity").buildArgs(80, "text", [], null), args)
 })
 
-test("claude.buildArgs pins the session via --session-id <uuid> when session is given", () => {
-  const session = {capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
-  const args = getAgent("claude").buildArgs(80, "pretty", [], session)
+test("claude.buildArgs uses --session-id <uuid> on the first run (capturedId null) and --resume after", () => {
+  const fresh = {capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
+  const freshArgs = getAgent("claude").buildArgs(80, "pretty", [], fresh)
 
-  assert.equal(valueAfter(args, "--session-id"), session.uuid)
+  assert.equal(valueAfter(freshArgs, "--session-id"), fresh.uuid)
+  assert.ok(!freshArgs.includes("--resume"))
+
+  const resumed = {capturedId: fresh.uuid, name: "promptmill", uuid: fresh.uuid}
+  const resumedArgs = getAgent("claude").buildArgs(80, "pretty", [], resumed)
+
+  assert.equal(valueAfter(resumedArgs, "--resume"), resumed.uuid)
+  assert.ok(!resumedArgs.includes("--session-id"))
 })
 
-test("gemini.buildArgs pins the session via --session-id <uuid> when session is given", () => {
-  const session = {capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
-  const args = getAgent("gemini").buildArgs(80, "pretty", [], session)
+test("gemini.buildArgs uses --session-id <uuid> on the first run (capturedId null) and --resume after", () => {
+  const fresh = {capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
+  const freshArgs = getAgent("gemini").buildArgs(80, "pretty", [], fresh)
 
-  assert.equal(valueAfter(args, "--session-id"), session.uuid)
+  assert.equal(valueAfter(freshArgs, "--session-id"), fresh.uuid)
+  assert.ok(!freshArgs.includes("--resume"))
+
+  const resumed = {capturedId: fresh.uuid, name: "promptmill", uuid: fresh.uuid}
+  const resumedArgs = getAgent("gemini").buildArgs(80, "pretty", [], resumed)
+
+  assert.equal(valueAfter(resumedArgs, "--resume"), resumed.uuid)
+  assert.ok(!resumedArgs.includes("--session-id"))
+})
+
+test("only Claude and Gemini declare sessionPreknown — Codex/Antigravity capture from the stream", () => {
+  assert.equal(getAgent("claude").sessionPreknown, true)
+  assert.equal(getAgent("gemini").sessionPreknown, true)
+  assert.notEqual(getAgent("codex").sessionPreknown, true)
+  assert.notEqual(getAgent("antigravity").sessionPreknown, true)
 })
 
 test("codex.buildArgs omits `resume` when capturedId is null and inserts it after exec when known", () => {

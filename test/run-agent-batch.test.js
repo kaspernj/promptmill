@@ -263,6 +263,66 @@ test("captures the agent's session id from the stdout stream and writes it to se
   assert.deepEqual(argsPerRun[1].slice(1), ["resume", "FAKE-THREAD-001"])
 })
 
+test("records session.uuid as the marker after the first successful run when recordKnownSessionUuid is true", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+  const session = {capturedId: null, name: "promptmill", uuid: "preknown-uuid-aaaa"}
+
+  /** @type {(string | null)[]} */
+  const observedCapturedIds = []
+  await runAgentBatch({
+    args: (_turns, sessionInfo) => {
+      observedCapturedIds.push(sessionInfo?.capturedId ?? null)
+
+      return [fixture("echo-stdin.js")]
+    },
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    promptText: "ignored",
+    recordKnownSessionUuid: true,
+    runs: 2,
+    session,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  assert.equal(session.capturedId, "preknown-uuid-aaaa")
+
+  const persisted = JSON.parse(await fs.readFile(path.join(logDir, "sessions.json"), "utf8"))
+  assert.deepEqual(persisted, {promptmill: "preknown-uuid-aaaa"})
+
+  // Run 1 had no captured id yet; run 2 should already see the marker.
+  assert.deepEqual(observedCapturedIds, [null, "preknown-uuid-aaaa"])
+})
+
+test("does not record the preknown session UUID when the first run fails", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+  const session = {capturedId: null, name: "promptmill", uuid: "preknown-uuid-bbbb"}
+
+  await runAgentBatch({
+    args: [fixture("exit-nonzero.js")],
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    promptText: "ignored",
+    recordKnownSessionUuid: true,
+    runs: 1,
+    session,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  assert.equal(session.capturedId, null) // a failed first run must not mark the session as created
+
+  await assert.rejects(fs.access(path.join(logDir, "sessions.json")))
+})
+
 test("promptText is used in place of reading from promptFile", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const logDir = path.join(root, "logs")
