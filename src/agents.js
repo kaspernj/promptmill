@@ -6,6 +6,7 @@ import {createGeminiStreamRenderer} from "./render-gemini-stream.js"
 
 /**
  * @typedef {object} SessionInfo
+ * @property {string} agentName - Agent owning this session — used to namespace the mapping so a shared --log-dir cannot cross-pollinate (e.g. a Claude UUID being mistaken for a Codex thread id).
  * @property {string} name - User-facing session name (e.g. "promptmill").
  * @property {string} uuid - Deterministic UUID v5 derived from the name.
  * @property {string | null} capturedId - Agent-assigned session id captured from a previous run, or null when not yet known.

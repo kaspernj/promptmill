@@ -145,13 +145,15 @@ export async function runAgentBatch(options) {
     //   - Stream-captured id (Codex thread.started, Antigravity scan).
     //   - Preknown UUID (Claude/Gemini); we know it from `session.uuid` and
     //     write it once we've confirmed the create succeeded (exit 0).
+    // Keyed by `<agentName>:<sessionName>` so a shared --log-dir cannot cross-
+    // pollinate (e.g. a Claude UUID being mistaken for a Codex thread id).
     if (sessionInfo !== null && sessionInfo.capturedId === null) {
       const idToRecord = newlyCapturedId ?? (status.code === 0 && recordKnownSessionUuid ? sessionInfo.uuid : null)
 
       if (idToRecord !== null) {
         sessionInfo.capturedId = idToRecord
         const mapping = readSessionMapping(resolvedLogDir)
-        mapping[sessionInfo.name] = idToRecord
+        mapping[`${sessionInfo.agentName}:${sessionInfo.name}`] = idToRecord
         writeSessionMapping(resolvedLogDir, mapping)
       }
     }

@@ -96,7 +96,7 @@ Per-agent details:
 - **Codex** cannot pin a session id up front. Promptmill runs `codex exec` fresh on first use, captures the assigned thread id from the `--json` stream's `thread.started` event, persists it to `<log-dir>/sessions.json`, and uses `codex exec resume <id>` for every subsequent run.
 - **Antigravity** is best-effort. Promptmill scans `agy --print` output for a recognizable conversation id; if found it is persisted and reused via `--conversation <id>`, otherwise each run starts fresh.
 
-The session UUID is printed at startup (`Session: promptmill (b8c4… )`). Delete the entry from `<log-dir>/sessions.json` (or delete the whole file) to force the next run to create a new session under the same name.
+The session UUID is printed at startup (`Session: promptmill (b8c4… )`). Markers in `<log-dir>/sessions.json` are keyed by `<agent>:<name>` (e.g. `"claude:promptmill"`), so a shared `--log-dir` cannot cross-pollinate sessions between agents. Delete the entry (or the whole file) to force the next run to create a new session under the same name.
 
 ## AwesomeTasks mode
 

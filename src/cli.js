@@ -296,7 +296,8 @@ export async function runCli(argv) {
 
   /** @type {import("./agents.js").SessionInfo} */
   const session = {
-    capturedId: sessionMapping[options.sessionName] ?? null,
+    agentName: agent.name,
+    capturedId: sessionMapping[`${agent.name}:${options.sessionName}`] ?? null,
     name: options.sessionName,
     uuid: deriveSessionUuid(options.sessionName)
   }
