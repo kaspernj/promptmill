@@ -189,6 +189,29 @@ test("claude.extractSessionId returns session.uuid on the system.init event and 
   assert.equal(claude.extractSessionId?.('{"type":"system","subtype":"init"}', null), null)
 })
 
+test("claude.extractSessionId self-heals when Claude rejects --session-id as already in use", () => {
+  const claude = getAgent("claude")
+  const session = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
+
+  // The error tells us the session already exists with our UUID — persist marker.
+  assert.equal(
+    claude.extractSessionId?.(`Error: Session ID ${session.uuid} is already in use.`, session),
+    session.uuid
+  )
+
+  // Defensive: a foreign UUID in the error must NOT persist our marker.
+  assert.equal(
+    claude.extractSessionId?.("Error: Session ID 99999999-9999-9999-9999-999999999999 is already in use.", session),
+    null
+  )
+
+  // No session means there is no UUID we can validate against.
+  assert.equal(
+    claude.extractSessionId?.("Error: Session ID 11111111-2222-3333-4444-555555555555 is already in use.", null),
+    null
+  )
+})
+
 test("gemini.extractSessionId returns event.session_id from the init event", () => {
   const gemini = getAgent("gemini")
   const session = {agentName: "gemini", capturedId: null, name: "promptmill", uuid: "ignored"}
@@ -197,6 +220,22 @@ test("gemini.extractSessionId returns event.session_id from the init event", () 
   assert.equal(gemini.extractSessionId?.('{"type":"message","content":"hi"}', session), null)
   assert.equal(gemini.extractSessionId?.('{"type":"init"}', session), null) // init without session_id
   assert.equal(gemini.extractSessionId?.("not json", session), null)
+})
+
+test("gemini.extractSessionId self-heals when Gemini rejects --session-id as already existing", () => {
+  const gemini = getAgent("gemini")
+  const session = {agentName: "gemini", capturedId: null, name: "promptmill", uuid: "22222222-3333-4444-5555-666666666666"}
+
+  assert.equal(
+    gemini.extractSessionId?.(`Session ID "${session.uuid}" already exists. Use --resume to resume it, or provide a different ID.`, session),
+    session.uuid
+  )
+
+  // Defensive: foreign UUID is never persisted.
+  assert.equal(
+    gemini.extractSessionId?.('Session ID "99999999-9999-9999-9999-999999999999" already exists.', session),
+    null
+  )
 })
 
 test("claude.buildArgs forces stream-json for the first capture run when format is text or json", () => {

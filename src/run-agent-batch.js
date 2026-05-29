@@ -132,6 +132,10 @@ export async function runAgentBatch(options) {
       logStderrOnly,
       logStream,
       onSpawn,
+      // The same extractor sees both streams so error-channel signals (e.g.
+      // Claude's "Session ID … is already in use.") drive session-state
+      // updates alongside stream-json events on stdout.
+      onStderrLine: onStdoutLine,
       onStdoutLine,
       prompt,
       stderr,

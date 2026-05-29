@@ -82,6 +82,15 @@ const claude = {
     ])
   },
   extractSessionId: (line, session) => {
+    // Self-heal path: Claude tells us by name when --session-id was rejected
+    // because the session already exists. Treat that as proof the session
+    // exists with the UUID we passed and persist the marker so subsequent
+    // runs take the --resume path. Guard on the exact UUID so a foreign id
+    // can never be persisted.
+    if (session !== null && line.includes(session.uuid) && /Session ID [0-9a-f-]+ is already in use/.test(line)) {
+      return session.uuid
+    }
+
     if (!line.includes('"type":"system"')) return null
 
     try {
@@ -119,7 +128,13 @@ const gemini = {
 
     return [...defaultGeminiArgs(effectiveFormat, claudeGeminiSessionArgs(session)), ...passthroughArgs]
   },
-  extractSessionId: (line, _session) => {
+  extractSessionId: (line, session) => {
+    // Self-heal: Gemini also rejects duplicate --session-id with a named
+    // error. Same UUID guard as Claude.
+    if (session !== null && line.includes(session.uuid) && /Session ID "[0-9a-f-]+" already exists/.test(line)) {
+      return session.uuid
+    }
+
     if (!line.includes('"type":"init"')) return null
 
     try {
