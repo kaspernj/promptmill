@@ -28,12 +28,13 @@ export function timestampForLogFile(date = new Date()) {
  * Parses an integer option from a raw value, falling back when empty and
  * throwing a descriptive error when the value is not an integer at least
  * `minimum`.
+ * @template {number | null} F
  * @param {string | undefined | null} rawValue - Raw value (flag or env var).
  * @param {object} args - Options.
  * @param {string} args.name - Option name used in error messages.
- * @param {number} args.fallback - Value returned when `rawValue` is empty.
+ * @param {F} args.fallback - Value returned when `rawValue` is empty.
  * @param {number} args.minimum - Minimum allowed value (inclusive).
- * @returns {number} - The parsed integer, or the fallback.
+ * @returns {number | F} - The parsed integer, or the fallback.
  */
 export function integerOption(rawValue, {name, fallback, minimum}) {
   if (rawValue === undefined || rawValue === null || rawValue === "") {

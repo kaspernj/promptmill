@@ -176,11 +176,67 @@ test("gemini.buildArgs uses --session-id <uuid> on the first run (capturedId nul
   assert.ok(!resumedArgs.includes("--session-id"))
 })
 
-test("only Claude and Gemini declare sessionPreknown — Codex/Antigravity capture from the stream", () => {
-  assert.equal(getAgent("claude").sessionPreknown, true)
-  assert.equal(getAgent("gemini").sessionPreknown, true)
-  assert.notEqual(getAgent("codex").sessionPreknown, true)
-  assert.notEqual(getAgent("antigravity").sessionPreknown, true)
+test("claude.extractSessionId returns session.uuid on the system.init event and null otherwise", () => {
+  const claude = getAgent("claude")
+  const session = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
+
+  assert.equal(claude.extractSessionId?.('{"type":"system","subtype":"init","model":"claude-opus-4-7"}', session), session.uuid)
+  // Different subtype (or none) means the session start hasn't been confirmed.
+  assert.equal(claude.extractSessionId?.('{"type":"system","subtype":"other"}', session), null)
+  assert.equal(claude.extractSessionId?.('{"type":"assistant","message":{"content":[]}}', session), null)
+  assert.equal(claude.extractSessionId?.("not json", session), null)
+  // No session info → we cannot return a UUID even on init.
+  assert.equal(claude.extractSessionId?.('{"type":"system","subtype":"init"}', null), null)
+})
+
+test("gemini.extractSessionId returns event.session_id from the init event", () => {
+  const gemini = getAgent("gemini")
+  const session = {agentName: "gemini", capturedId: null, name: "promptmill", uuid: "ignored"}
+
+  assert.equal(gemini.extractSessionId?.('{"type":"init","session_id":"abc-123","model":"pro"}', session), "abc-123")
+  assert.equal(gemini.extractSessionId?.('{"type":"message","content":"hi"}', session), null)
+  assert.equal(gemini.extractSessionId?.('{"type":"init"}', session), null) // init without session_id
+  assert.equal(gemini.extractSessionId?.("not json", session), null)
+})
+
+test("claude.buildArgs forces stream-json for the first capture run when format is text or json", () => {
+  const fresh = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "fresh-uuid"}
+
+  for (const nonStreamingFormat of /** @type {("text" | "json")[]} */ (["text", "json"])) {
+    const args = getAgent("claude").buildArgs(null, nonStreamingFormat, [], fresh)
+
+    assert.equal(valueAfter(args, "--output-format"), "stream-json", `should force stream-json from ${nonStreamingFormat}`)
+    assert.ok(args.includes("--verbose"), `should add --verbose from ${nonStreamingFormat}`)
+  }
+})
+
+test("claude.buildArgs honors text/json mode once the session id is captured", () => {
+  const resumed = {agentName: "claude", capturedId: "uuid", name: "promptmill", uuid: "uuid"}
+
+  for (const userFormat of /** @type {("text" | "json")[]} */ (["text", "json"])) {
+    const args = getAgent("claude").buildArgs(null, userFormat, [], resumed)
+
+    assert.equal(valueAfter(args, "--output-format"), userFormat)
+    assert.ok(!args.includes("--verbose"))
+  }
+})
+
+test("gemini.buildArgs forces stream-json for the first capture run when format is text or json", () => {
+  const fresh = {agentName: "gemini", capturedId: null, name: "promptmill", uuid: "fresh-uuid"}
+
+  for (const nonStreamingFormat of /** @type {("text" | "json")[]} */ (["text", "json"])) {
+    const args = getAgent("gemini").buildArgs(null, nonStreamingFormat, [], fresh)
+
+    assert.equal(valueAfter(args, "--output-format"), "stream-json", `should force stream-json from ${nonStreamingFormat}`)
+  }
+})
+
+test("claude.buildArgs omits --max-turns when null and emits it when given", () => {
+  const noCap = getAgent("claude").buildArgs(null, "pretty", [], null)
+  assert.ok(!noCap.includes("--max-turns"))
+
+  const withCap = getAgent("claude").buildArgs(50, "pretty", [], null)
+  assert.equal(valueAfter(withCap, "--max-turns"), "50")
 })
 
 test("codex.buildArgs omits `resume` when capturedId is null and inserts it after exec when known", () => {
@@ -226,8 +282,9 @@ test("codex.buildArgs honors text mode once the session id is captured", () => {
 
 test("codex.extractSessionId parses thread.started events and ignores other JSON", () => {
   const codex = getAgent("codex")
+  const session = {agentName: "codex", capturedId: null, name: "promptmill", uuid: "ignored"}
 
-  assert.equal(codex.extractSessionId?.('{"type":"thread.started","thread_id":"01J3X…"}'), "01J3X…")
-  assert.equal(codex.extractSessionId?.('{"type":"turn.completed"}'), null)
-  assert.equal(codex.extractSessionId?.("not json"), null)
+  assert.equal(codex.extractSessionId?.('{"type":"thread.started","thread_id":"01J3X…"}', session), "01J3X…")
+  assert.equal(codex.extractSessionId?.('{"type":"turn.completed"}', session), null)
+  assert.equal(codex.extractSessionId?.("not json", session), null)
 })

@@ -28,6 +28,12 @@ test("defaultClaudeArgs defaults to pretty, which runs Claude in stream-json wit
   assert.equal(valueAfter(args, "--max-turns"), "80")
 })
 
+test("defaultClaudeArgs omits --max-turns when null (no cap)", () => {
+  const args = defaultClaudeArgs(null)
+
+  assert.ok(!args.includes("--max-turns"))
+})
+
 test("explicit pretty maps to stream-json with --verbose", () => {
   const args = defaultClaudeArgs(80, "pretty")
 
