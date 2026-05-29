@@ -296,7 +296,8 @@ export async function runCli(argv) {
 
   /** @type {import("./agents.js").SessionInfo} */
   const session = {
-    capturedId: sessionMapping[options.sessionName] ?? null,
+    agentName: agent.name,
+    capturedId: sessionMapping[`${agent.name}:${options.sessionName}`] ?? null,
     name: options.sessionName,
     uuid: deriveSessionUuid(options.sessionName)
   }
@@ -337,6 +338,7 @@ export async function runCli(argv) {
     createRenderer: outputFormat === "pretty" ? agent.createRenderer : undefined,
     cwd: options.cwd,
     extractSessionId: agent.extractSessionId,
+    recordKnownSessionUuid: agent.sessionPreknown === true,
     logStderrOnly: outputFormat === "text" && agent.textProgressOnStderr === true,
     label: options.label ?? agent.label,
     logDir: options.logDir ?? agent.logDir,

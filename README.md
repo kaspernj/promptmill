@@ -92,11 +92,11 @@ promptmill prompts/feature-b.md --session-id feature-b
 
 Per-agent details:
 
-- **Claude** and **Gemini** pin the session via `--session-id <uuid>`. Promptmill derives a deterministic UUID v5 from the session name, so the same name always resolves to the same UUID across machines and time.
-- **Codex** cannot pin a session id up front. Promptmill runs `codex exec` fresh on first use, captures the assigned thread id from the `--json` stream's `thread.started` event, persists it to `<log-dir>/sessions.json`, and uses `codex exec resume <id>` for every subsequent run (in this batch and future invocations).
+- **Claude** and **Gemini**: promptmill derives a deterministic UUID v5 from the session name (same name → same UUID across machines and time). The first run for a name uses `--session-id <uuid>` to create the session; promptmill then records that UUID as a "session created" marker in `<log-dir>/sessions.json` and every subsequent run (in this batch and future invocations) uses `--resume <uuid>`. (Both CLIs treat `--session-id` as strictly create-only and error on a duplicate id, so the marker is required to avoid `Session ID … is already in use.`)
+- **Codex** cannot pin a session id up front. Promptmill runs `codex exec` fresh on first use, captures the assigned thread id from the `--json` stream's `thread.started` event, persists it to `<log-dir>/sessions.json`, and uses `codex exec resume <id>` for every subsequent run.
 - **Antigravity** is best-effort. Promptmill scans `agy --print` output for a recognizable conversation id; if found it is persisted and reused via `--conversation <id>`, otherwise each run starts fresh.
 
-The session UUID is printed at startup (`Session: promptmill (b8c4… )`). Delete `<log-dir>/sessions.json` to force a fresh session for the Codex/Antigravity flow.
+The session UUID is printed at startup (`Session: promptmill (b8c4… )`). Markers in `<log-dir>/sessions.json` are keyed by `<agent>:<name>` (e.g. `"claude:promptmill"`), so a shared `--log-dir` cannot cross-pollinate sessions between agents. Delete the entry (or the whole file) to force the next run to create a new session under the same name.
 
 ## AwesomeTasks mode
 

@@ -34,6 +34,7 @@ import {readSessionMapping, writeSessionMapping} from "./session.js"
  * @property {string[] | ((maxTurns: number, session: import("./agents.js").SessionInfo | null) => string[])} [args] - Args for the command, or a factory invoked once per run with the current session info.
  * @property {import("./agents.js").SessionInfo} [session] - Shared session info reused across runs and invocations; mutated in-place when a capturedId is discovered.
  * @property {(line: string) => string | null} [extractSessionId] - Parses one raw stdout line and returns the agent's session id when present.
+ * @property {boolean} [recordKnownSessionUuid] - True when the agent's session id is preknown (= `session.uuid`); after a successful first run with no stream-captured id, persist that UUID as the "session created" marker.
  * @property {string} [cwd] - Working directory for spawns and log-dir resolution.
  * @property {string} [logFilePrefix] - Per-run log filename prefix.
  * @property {string} [label] - Console banner label.
@@ -75,7 +76,8 @@ export async function runAgentBatch(options) {
     shouldStop = () => false,
     onSpawn,
     session,
-    extractSessionId
+    extractSessionId,
+    recordKnownSessionUuid = false
   } = options
 
   if (promptText === undefined && promptFile === undefined) {
@@ -138,11 +140,22 @@ export async function runAgentBatch(options) {
       stdout
     })
 
-    if (newlyCapturedId !== null && sessionInfo !== null) {
-      sessionInfo.capturedId = newlyCapturedId
-      const mapping = readSessionMapping(resolvedLogDir)
-      mapping[sessionInfo.name] = newlyCapturedId
-      writeSessionMapping(resolvedLogDir, mapping)
+    // After a successful first run, persist the session id so subsequent runs
+    // (in this batch and future invocations) take the "resume" path. Two paths:
+    //   - Stream-captured id (Codex thread.started, Antigravity scan).
+    //   - Preknown UUID (Claude/Gemini); we know it from `session.uuid` and
+    //     write it once we've confirmed the create succeeded (exit 0).
+    // Keyed by `<agentName>:<sessionName>` so a shared --log-dir cannot cross-
+    // pollinate (e.g. a Claude UUID being mistaken for a Codex thread id).
+    if (sessionInfo !== null && sessionInfo.capturedId === null) {
+      const idToRecord = newlyCapturedId ?? (status.code === 0 && recordKnownSessionUuid ? sessionInfo.uuid : null)
+
+      if (idToRecord !== null) {
+        sessionInfo.capturedId = idToRecord
+        const mapping = readSessionMapping(resolvedLogDir)
+        mapping[`${sessionInfo.agentName}:${sessionInfo.name}`] = idToRecord
+        writeSessionMapping(resolvedLogDir, mapping)
+      }
     }
 
     if (status.code === 0) {

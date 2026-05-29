@@ -6,6 +6,7 @@ import {createGeminiStreamRenderer} from "./render-gemini-stream.js"
 
 /**
  * @typedef {object} SessionInfo
+ * @property {string} agentName - Agent owning this session — used to namespace the mapping so a shared --log-dir cannot cross-pollinate (e.g. a Claude UUID being mistaken for a Codex thread id).
  * @property {string} name - User-facing session name (e.g. "promptmill").
  * @property {string} uuid - Deterministic UUID v5 derived from the name.
  * @property {string | null} capturedId - Agent-assigned session id captured from a previous run, or null when not yet known.
@@ -27,17 +28,26 @@ import {createGeminiStreamRenderer} from "./render-gemini-stream.js"
  * @property {(maxTurns: number, outputFormat: "pretty" | "text" | "json" | "stream-json", passthroughArgs: string[], session: SessionInfo | null) => string[]} buildArgs - Builds the agent's CLI args. `session` may be null when sessions are disabled.
  * @property {(prefix: string, sinks: import("node:stream").Writable[]) => {write: (chunk: Buffer | string) => void, flush: () => void}} [createRenderer] - Live `pretty` stream renderer; omit for agents with no JSON event stream (raw text passthrough).
  * @property {(line: string) => string | null} [extractSessionId] - Parses one raw stdout line and returns the agent's session id when present. Used to capture agent-assigned ids (Codex, Antigravity).
+ * @property {boolean} [sessionPreknown] - True when the session id is the derived UUID (`session.uuid`), so `runAgentBatch` records that UUID as the "session created" marker after the first successful run. False/absent for agents that capture the id from the stream.
  */
 
 /**
- * Renders the agent-specific args that pin a session by the derived UUID.
+ * Renders the Claude/Gemini session args that either create the session on the
+ * first run (`--session-id <uuid>`) or resume the already-created one on every
+ * subsequent run and invocation (`--resume <uuid>`). Both CLIs treat
+ * `--session-id` as strictly create-only and error when the id already exists,
+ * so the presence of `session.capturedId` (the derived UUID, written to
+ * `<log-dir>/sessions.json` after the first successful run) drives the choice.
  * Returns `[]` when sessions are disabled.
  * @param {SessionInfo | null} session - Session info or null.
- * @param {string} flag - Flag name (e.g. "--session-id").
  * @returns {string[]} - The args, or `[]`.
  */
-function uuidSessionArgs(session, flag) {
-  return session === null ? [] : [flag, session.uuid]
+function claudeGeminiSessionArgs(session) {
+  if (session === null) return []
+
+  const flag = session.capturedId === null ? "--session-id" : "--resume"
+
+  return [flag, session.uuid]
 }
 
 /** @type {Agent} */
@@ -52,8 +62,9 @@ const claude = {
   defaultLevel: "xhigh",
   modelArg: (model) => ["--model", model],
   levelArg: (level) => ["--effort", level],
+  sessionPreknown: true,
   buildArgs: (maxTurns, outputFormat, passthroughArgs, session) =>
-    ensureStreamJsonVerbose([...defaultClaudeArgs(maxTurns, outputFormat, uuidSessionArgs(session, "--session-id")), ...passthroughArgs])
+    ensureStreamJsonVerbose([...defaultClaudeArgs(maxTurns, outputFormat, claudeGeminiSessionArgs(session)), ...passthroughArgs])
   ,
   createRenderer: createClaudeStreamRenderer
 }
@@ -68,9 +79,10 @@ const gemini = {
   usesMaxTurns: false,
   defaultModel: "pro", // highest alias (resolves to gemini-3-pro-preview / gemini-2.5-pro); Gemini has no separate level flag
   modelArg: (model) => ["-m", model],
+  sessionPreknown: true,
   // Gemini reads the prompt from stdin (no -p) and has no turn-limit CLI flag.
   buildArgs: (_maxTurns, outputFormat, passthroughArgs, session) =>
-    [...defaultGeminiArgs(outputFormat, uuidSessionArgs(session, "--session-id")), ...passthroughArgs],
+    [...defaultGeminiArgs(outputFormat, claudeGeminiSessionArgs(session)), ...passthroughArgs],
   createRenderer: createGeminiStreamRenderer
 }
 

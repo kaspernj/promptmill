@@ -218,7 +218,7 @@ test("captures the agent's session id from the stdout stream and writes it to se
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const logDir = path.join(root, "logs")
   const captured = collectingStream()
-  const session = {capturedId: null, name: "promptmill", uuid: "ignored-by-fake-codex"}
+  const session = {agentName: "codex", capturedId: null, name: "promptmill", uuid: "ignored-by-fake-codex"}
 
   /** @type {string[][]} */
   const argsPerRun = []
@@ -256,11 +256,102 @@ test("captures the agent's session id from the stdout stream and writes it to se
 
   const persisted = JSON.parse(await fs.readFile(path.join(logDir, "sessions.json"), "utf8"))
 
-  assert.deepEqual(persisted, {promptmill: "FAKE-THREAD-001"})
+  assert.deepEqual(persisted, {"codex:promptmill": "FAKE-THREAD-001"})
 
   // Run 1 had no captured id yet; run 2 should have been spawned with resume.
   assert.deepEqual(argsPerRun[0].slice(1), [])
   assert.deepEqual(argsPerRun[1].slice(1), ["resume", "FAKE-THREAD-001"])
+})
+
+test("records session.uuid as the marker after the first successful run when recordKnownSessionUuid is true", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+  const session = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "preknown-uuid-aaaa"}
+
+  /** @type {(string | null)[]} */
+  const observedCapturedIds = []
+  await runAgentBatch({
+    args: (_turns, sessionInfo) => {
+      observedCapturedIds.push(sessionInfo?.capturedId ?? null)
+
+      return [fixture("echo-stdin.js")]
+    },
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    promptText: "ignored",
+    recordKnownSessionUuid: true,
+    runs: 2,
+    session,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  assert.equal(session.capturedId, "preknown-uuid-aaaa")
+
+  const persisted = JSON.parse(await fs.readFile(path.join(logDir, "sessions.json"), "utf8"))
+  assert.deepEqual(persisted, {"claude:promptmill": "preknown-uuid-aaaa"})
+
+  // Run 1 had no captured id yet; run 2 should already see the marker.
+  assert.deepEqual(observedCapturedIds, [null, "preknown-uuid-aaaa"])
+})
+
+test("a shared log-dir does not cross-pollinate sessions between agents", async () => {
+  // Simulates the user-reported risk: --log-dir is shared. The Claude marker
+  // must not be picked up by a later Codex run with the same session name.
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const logDir = path.join(root, "shared-logs")
+  const captured = collectingStream()
+  const claudeSession = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "preknown-uuid-claude"}
+
+  await runAgentBatch({
+    args: [fixture("echo-stdin.js")],
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    promptText: "ignored",
+    recordKnownSessionUuid: true,
+    runs: 1,
+    session: claudeSession,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  const persisted = JSON.parse(await fs.readFile(path.join(logDir, "sessions.json"), "utf8"))
+
+  assert.deepEqual(persisted, {"claude:promptmill": "preknown-uuid-claude"})
+  // The bare "promptmill" key must not exist — otherwise a later Codex run
+  // reading sessions.json from the same dir would mistake the Claude UUID for
+  // its own thread id and try `codex exec resume <claude-uuid>`.
+  assert.equal(Object.prototype.hasOwnProperty.call(persisted, "promptmill"), false)
+})
+
+test("does not record the preknown session UUID when the first run fails", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+  const session = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "preknown-uuid-bbbb"}
+
+  await runAgentBatch({
+    args: [fixture("exit-nonzero.js")],
+    command: process.execPath,
+    cwd: root,
+    logDir,
+    logger: silentLogger,
+    promptText: "ignored",
+    recordKnownSessionUuid: true,
+    runs: 1,
+    session,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  assert.equal(session.capturedId, null) // a failed first run must not mark the session as created
+
+  await assert.rejects(fs.access(path.join(logDir, "sessions.json")))
 })
 
 test("promptText is used in place of reading from promptFile", async () => {

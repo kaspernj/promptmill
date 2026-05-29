@@ -148,46 +148,67 @@ test("antigravity.buildArgs runs `agy --print` with auto-approve regardless of o
   assert.deepEqual(getAgent("antigravity").buildArgs(80, "text", [], null), args)
 })
 
-test("claude.buildArgs pins the session via --session-id <uuid> when session is given", () => {
-  const session = {capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
-  const args = getAgent("claude").buildArgs(80, "pretty", [], session)
+test("claude.buildArgs uses --session-id <uuid> on the first run (capturedId null) and --resume after", () => {
+  const fresh = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
+  const freshArgs = getAgent("claude").buildArgs(80, "pretty", [], fresh)
 
-  assert.equal(valueAfter(args, "--session-id"), session.uuid)
+  assert.equal(valueAfter(freshArgs, "--session-id"), fresh.uuid)
+  assert.ok(!freshArgs.includes("--resume"))
+
+  const resumed = {agentName: "claude", capturedId: fresh.uuid, name: "promptmill", uuid: fresh.uuid}
+  const resumedArgs = getAgent("claude").buildArgs(80, "pretty", [], resumed)
+
+  assert.equal(valueAfter(resumedArgs, "--resume"), resumed.uuid)
+  assert.ok(!resumedArgs.includes("--session-id"))
 })
 
-test("gemini.buildArgs pins the session via --session-id <uuid> when session is given", () => {
-  const session = {capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
-  const args = getAgent("gemini").buildArgs(80, "pretty", [], session)
+test("gemini.buildArgs uses --session-id <uuid> on the first run (capturedId null) and --resume after", () => {
+  const fresh = {agentName: "gemini", capturedId: null, name: "promptmill", uuid: "11111111-2222-3333-4444-555555555555"}
+  const freshArgs = getAgent("gemini").buildArgs(80, "pretty", [], fresh)
 
-  assert.equal(valueAfter(args, "--session-id"), session.uuid)
+  assert.equal(valueAfter(freshArgs, "--session-id"), fresh.uuid)
+  assert.ok(!freshArgs.includes("--resume"))
+
+  const resumed = {agentName: "gemini", capturedId: fresh.uuid, name: "promptmill", uuid: fresh.uuid}
+  const resumedArgs = getAgent("gemini").buildArgs(80, "pretty", [], resumed)
+
+  assert.equal(valueAfter(resumedArgs, "--resume"), resumed.uuid)
+  assert.ok(!resumedArgs.includes("--session-id"))
+})
+
+test("only Claude and Gemini declare sessionPreknown — Codex/Antigravity capture from the stream", () => {
+  assert.equal(getAgent("claude").sessionPreknown, true)
+  assert.equal(getAgent("gemini").sessionPreknown, true)
+  assert.notEqual(getAgent("codex").sessionPreknown, true)
+  assert.notEqual(getAgent("antigravity").sessionPreknown, true)
 })
 
 test("codex.buildArgs omits `resume` when capturedId is null and inserts it after exec when known", () => {
-  const fresh = {capturedId: null, name: "promptmill", uuid: "ignored-for-codex"}
+  const fresh = {agentName: "codex", capturedId: null, name: "promptmill", uuid: "ignored-for-codex"}
   const freshArgs = getAgent("codex").buildArgs(80, "pretty", [], fresh)
 
   assert.equal(freshArgs[0], "exec")
   assert.notEqual(freshArgs[1], "resume")
 
-  const resumed = {capturedId: "01ABCDEF-1234-5678-90AB-CDEF12345678", name: "promptmill", uuid: "ignored"}
+  const resumed = {agentName: "codex", capturedId: "01ABCDEF-1234-5678-90AB-CDEF12345678", name: "promptmill", uuid: "ignored"}
   const resumedArgs = getAgent("codex").buildArgs(80, "pretty", [], resumed)
 
   assert.deepEqual(resumedArgs.slice(0, 3), ["exec", "resume", resumed.capturedId])
 })
 
 test("antigravity.buildArgs pins --conversation only when capturedId is known", () => {
-  const fresh = {capturedId: null, name: "promptmill", uuid: "ignored"}
+  const fresh = {agentName: "antigravity", capturedId: null, name: "promptmill", uuid: "ignored"}
 
   assert.ok(!getAgent("antigravity").buildArgs(80, "pretty", [], fresh).includes("--conversation"))
 
-  const resumed = {capturedId: "conv-abc123", name: "promptmill", uuid: "ignored"}
+  const resumed = {agentName: "antigravity", capturedId: "conv-abc123", name: "promptmill", uuid: "ignored"}
   const resumedArgs = getAgent("antigravity").buildArgs(80, "pretty", [], resumed)
 
   assert.equal(valueAfter(resumedArgs, "--conversation"), "conv-abc123")
 })
 
 test("codex.buildArgs forces --json in text mode when a session id still needs capturing", () => {
-  const session = {capturedId: null, name: "promptmill", uuid: "ignored"}
+  const session = {agentName: "codex", capturedId: null, name: "promptmill", uuid: "ignored"}
   const args = getAgent("codex").buildArgs(80, "text", [], session)
 
   // Without --json the extractor would never see thread.started; force it on
@@ -196,7 +217,7 @@ test("codex.buildArgs forces --json in text mode when a session id still needs c
 })
 
 test("codex.buildArgs honors text mode once the session id is captured", () => {
-  const session = {capturedId: "FAKE-THREAD", name: "promptmill", uuid: "ignored"}
+  const session = {agentName: "codex", capturedId: "FAKE-THREAD", name: "promptmill", uuid: "ignored"}
   const args = getAgent("codex").buildArgs(80, "text", [], session)
 
   // Already captured — no reason to override the user's chosen format.
