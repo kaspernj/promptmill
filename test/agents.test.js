@@ -199,27 +199,36 @@ test("gemini.extractSessionId returns event.session_id from the init event", () 
   assert.equal(gemini.extractSessionId?.("not json", session), null)
 })
 
-test("claude.buildArgs forces stream-json in text mode when a session still needs capturing", () => {
+test("claude.buildArgs forces stream-json for the first capture run when format is text or json", () => {
   const fresh = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "fresh-uuid"}
-  const args = getAgent("claude").buildArgs(null, "text", [], fresh)
 
-  assert.equal(valueAfter(args, "--output-format"), "stream-json")
-  assert.ok(args.includes("--verbose"))
+  for (const nonStreamingFormat of /** @type {("text" | "json")[]} */ (["text", "json"])) {
+    const args = getAgent("claude").buildArgs(null, nonStreamingFormat, [], fresh)
+
+    assert.equal(valueAfter(args, "--output-format"), "stream-json", `should force stream-json from ${nonStreamingFormat}`)
+    assert.ok(args.includes("--verbose"), `should add --verbose from ${nonStreamingFormat}`)
+  }
 })
 
-test("claude.buildArgs honors text mode once the session id is captured", () => {
+test("claude.buildArgs honors text/json mode once the session id is captured", () => {
   const resumed = {agentName: "claude", capturedId: "uuid", name: "promptmill", uuid: "uuid"}
-  const args = getAgent("claude").buildArgs(null, "text", [], resumed)
 
-  assert.equal(valueAfter(args, "--output-format"), "text")
-  assert.ok(!args.includes("--verbose"))
+  for (const userFormat of /** @type {("text" | "json")[]} */ (["text", "json"])) {
+    const args = getAgent("claude").buildArgs(null, userFormat, [], resumed)
+
+    assert.equal(valueAfter(args, "--output-format"), userFormat)
+    assert.ok(!args.includes("--verbose"))
+  }
 })
 
-test("gemini.buildArgs forces stream-json in text mode when a session still needs capturing", () => {
+test("gemini.buildArgs forces stream-json for the first capture run when format is text or json", () => {
   const fresh = {agentName: "gemini", capturedId: null, name: "promptmill", uuid: "fresh-uuid"}
-  const args = getAgent("gemini").buildArgs(null, "text", [], fresh)
 
-  assert.equal(valueAfter(args, "--output-format"), "stream-json")
+  for (const nonStreamingFormat of /** @type {("text" | "json")[]} */ (["text", "json"])) {
+    const args = getAgent("gemini").buildArgs(null, nonStreamingFormat, [], fresh)
+
+    assert.equal(valueAfter(args, "--output-format"), "stream-json", `should force stream-json from ${nonStreamingFormat}`)
+  }
 })
 
 test("claude.buildArgs omits --max-turns when null and emits it when given", () => {

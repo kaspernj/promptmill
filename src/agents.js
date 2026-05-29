@@ -66,10 +66,15 @@ const claude = {
   // and pass it via `--session-id`, so on the init confirmation we simply
   // return the same UUID for persistence.
   buildArgs: (maxTurns, outputFormat, passthroughArgs, session) => {
-    // text mode has no stream-json events → session capture cannot fire. Force
-    // stream-json for the first capture run; subsequent runs honor text mode.
+    // Only `pretty` and `stream-json` actually emit the NDJSON event stream
+    // that the extractor reads — `text` is plain text and `json` is a single
+    // final object. Force stream-json for the first capture run when the user
+    // picked either of those non-streaming modes; subsequent runs honor the
+    // user's chosen format.
     const needsCapture = session !== null && session.capturedId === null
-    const effectiveFormat = needsCapture && outputFormat === "text" ? "stream-json" : outputFormat
+    const effectiveFormat = needsCapture && (outputFormat === "text" || outputFormat === "json")
+      ? "stream-json"
+      : outputFormat
 
     return ensureStreamJsonVerbose([
       ...defaultClaudeArgs(maxTurns, effectiveFormat, claudeGeminiSessionArgs(session)),
@@ -104,10 +109,13 @@ const gemini = {
   // Gemini's stream-json init event embeds session_id directly, so the
   // extractor parses it from the line.
   buildArgs: (_maxTurns, outputFormat, passthroughArgs, session) => {
-    // text mode has no stream-json events → force stream-json for the first
-    // capture run so the init event is visible.
+    // Neither `text` (plain text) nor `json` (single final object) produces
+    // the NDJSON stream the extractor needs. Force stream-json for the first
+    // capture run in either case; subsequent runs honor the user's choice.
     const needsCapture = session !== null && session.capturedId === null
-    const effectiveFormat = needsCapture && outputFormat === "text" ? "stream-json" : outputFormat
+    const effectiveFormat = needsCapture && (outputFormat === "text" || outputFormat === "json")
+      ? "stream-json"
+      : outputFormat
 
     return [...defaultGeminiArgs(effectiveFormat, claudeGeminiSessionArgs(session)), ...passthroughArgs]
   },
