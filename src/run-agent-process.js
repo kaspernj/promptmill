@@ -75,9 +75,10 @@ function createLinePrefixer(prefix, sinks) {
  * @param {boolean} [args.logStderrOnly] - Send the child's stderr to the log only, not the live console (e.g. an agent that streams progress to stderr in a "final result only" mode).
  * @param {(child: import("node:child_process").ChildProcess) => void} [args.onSpawn] - Receives the spawned child.
  * @param {(line: string) => void} [args.onStdoutLine] - Optional tap fired for each completed raw stdout line (before renderer/prefixer). Used to capture agent-assigned session ids from stream events.
+ * @param {(line: string) => void} [args.onStderrLine] - Optional tap fired for each completed raw stderr line. Mirrors `onStdoutLine` so error-channel signals (e.g. Claude's "Session ID … is already in use." rejection) can drive session-state updates.
  * @returns {Promise<AgentRunStatus>} - Resolves with the run status.
  */
-export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", createRenderer, logStderrOnly = false, onSpawn, onStdoutLine}) {
+export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logStream, linePrefix = "", createRenderer, logStderrOnly = false, onSpawn, onStdoutLine, onStderrLine}) {
   return new Promise((resolve) => {
     // `detached` puts the child in its own process group, so a terminal Ctrl+C
     // (SIGINT to the foreground group) does not reach it — promptmill decides
@@ -97,27 +98,34 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
       : (linePrefix ? createLinePrefixer(linePrefix, [stdout, logStream]) : null)
     const errPrefixer = linePrefix ? createLinePrefixer(linePrefix, errSinks) : null
 
-    // Side-tap for onStdoutLine: split raw stdout into lines and notify the
-    // caller for each one. Independent of the renderer so it works in every
-    // output mode (pretty/json/stream-json/text).
-    let tapBuffer = ""
+    // Side-tap for onStdoutLine / onStderrLine: split each raw stream into
+    // lines and notify the caller. Independent of the renderer/prefixer so it
+    // works in every output mode (pretty/json/stream-json/text). Errors that
+    // surface on stderr (e.g. Claude's "Session ID … is already in use.") get
+    // the same observer treatment as stdout events.
+    const stdoutTap = {value: ""}
+    const stderrTap = {value: ""}
 
-    /** @param {Buffer | string} chunk - Raw stdout chunk to inspect. */
-    function tapStdout(chunk) {
-      if (!onStdoutLine) return
+    /**
+     * @param {Buffer | string} chunk - Raw chunk to feed into the line tap.
+     * @param {((line: string) => void) | undefined} listener - Per-line listener.
+     * @param {{value: string}} buffer - Mutable buffer of leftover characters between chunks.
+     */
+    function tapLines(chunk, listener, buffer) {
+      if (!listener) return
 
-      tapBuffer += String(chunk)
-      let newlineIndex = tapBuffer.indexOf("\n")
+      buffer.value += String(chunk)
+      let newlineIndex = buffer.value.indexOf("\n")
 
       while (newlineIndex !== -1) {
-        onStdoutLine(tapBuffer.slice(0, newlineIndex))
-        tapBuffer = tapBuffer.slice(newlineIndex + 1)
-        newlineIndex = tapBuffer.indexOf("\n")
+        listener(buffer.value.slice(0, newlineIndex))
+        buffer.value = buffer.value.slice(newlineIndex + 1)
+        newlineIndex = buffer.value.indexOf("\n")
       }
     }
 
     child.stdout?.on("data", (chunk) => {
-      tapStdout(chunk)
+      tapLines(chunk, onStdoutLine, stdoutTap)
 
       if (outWriter) {
         outWriter.write(chunk)
@@ -128,6 +136,8 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
     })
 
     child.stderr?.on("data", (chunk) => {
+      tapLines(chunk, onStderrLine, stderrTap)
+
       if (errPrefixer) {
         errPrefixer.write(chunk)
       } else {
@@ -145,9 +155,13 @@ export function spawnAgentRun({command, args, prompt, cwd, stdout, stderr, logSt
       outWriter?.flush()
       errPrefixer?.flush()
 
-      if (onStdoutLine && tapBuffer.length > 0) {
-        onStdoutLine(tapBuffer)
-        tapBuffer = ""
+      if (onStdoutLine && stdoutTap.value.length > 0) {
+        onStdoutLine(stdoutTap.value)
+        stdoutTap.value = ""
+      }
+      if (onStderrLine && stderrTap.value.length > 0) {
+        onStderrLine(stderrTap.value)
+        stderrTap.value = ""
       }
     }
 

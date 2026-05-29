@@ -348,6 +348,55 @@ test("a shared log-dir does not cross-pollinate sessions between agents", async 
   assert.equal(Object.prototype.hasOwnProperty.call(persisted, "promptmill"), false)
 })
 
+test("self-heals when Claude rejects --session-id as already in use: marker is written from the stderr error", async () => {
+  // Regression for the v0.1.13-stuck-state report: an earlier release created
+  // the session on Claude's side but never wrote the marker, so on master the
+  // first run errors out with "Session ID … is already in use." That message
+  // is itself proof the session exists, so promptmill should persist the
+  // marker from it and let runs 2..N take the --resume path.
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
+  const logDir = path.join(root, "logs")
+  const captured = collectingStream()
+  // Must match the literal UUID hardcoded in the fixture.
+  const session = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "af0960f6-6d67-5859-a882-4b190358a709"}
+
+  /** @type {(string | null)[]} */
+  const observedCapturedIds = []
+  const result = await runAgentBatch({
+    args: (_turns, sessionInfo) => {
+      observedCapturedIds.push(sessionInfo?.capturedId ?? null)
+
+      return [fixture("claude-already-in-use.js")]
+    },
+    command: process.execPath,
+    cwd: root,
+    extractSessionId: (line, sess) => {
+      if (sess !== null && line.includes(sess.uuid) && /Session ID [0-9a-f-]+ is already in use/.test(line)) {
+        return sess.uuid
+      }
+
+      return null
+    },
+    logDir,
+    logger: silentLogger,
+    promptText: "ignored",
+    runs: 2,
+    session,
+    stderr: captured.stream,
+    stdout: captured.stream
+  })
+
+  // Both runs of the fixture exit 1 — but the marker was written after run 1.
+  assert.equal(result.failures, 2)
+  assert.equal(session.capturedId, "af0960f6-6d67-5859-a882-4b190358a709")
+
+  const persisted = JSON.parse(await fs.readFile(path.join(logDir, "sessions.json"), "utf8"))
+  assert.deepEqual(persisted, {"claude:promptmill": "af0960f6-6d67-5859-a882-4b190358a709"})
+
+  // Run 1 had no captured id yet; run 2 already saw the marker.
+  assert.deepEqual(observedCapturedIds, [null, "af0960f6-6d67-5859-a882-4b190358a709"])
+})
+
 test("does not persist a session marker when the extractor never fires (e.g. immediate failure before any init event)", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const logDir = path.join(root, "logs")
