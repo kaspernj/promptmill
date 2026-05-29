@@ -20,7 +20,7 @@ test("defaults are applied for a bare prompt file", () => {
   assert.equal(options.error, null)
   assert.equal(options.promptFile, "prompt.md")
   assert.equal(options.runsRaw, "100")
-  assert.equal(options.maxTurnsRaw, "80")
+  assert.equal(options.maxTurnsRaw, null) // no default — --max-turns is opt-in
   assert.equal(options.agent, "claude")
   assert.equal(options.outputFormat, "pretty")
   assert.equal(options.prefixOutputLines, true)
@@ -63,13 +63,17 @@ test("resolveModelLevelArgs rejects flags an agent does not support", () => {
   assert.throws(() => resolveModelLevelArgs(getAgent("gemini"), {level: "high", model: null}), /does not support --level/)
 })
 
-test("resolveMaxTurns validates for Claude but ignores the value for Gemini", () => {
+test("resolveMaxTurns is null by default (no cap) and honors an explicit value for Claude", () => {
+  // Default: no flag, no env → no cap.
+  assert.equal(resolveMaxTurns(getAgent("claude"), null), null)
+
   // Claude honors --max-turns: valid parses, invalid throws.
   assert.equal(resolveMaxTurns(getAgent("claude"), "60"), 60)
   assert.throws(() => resolveMaxTurns(getAgent("claude"), "not-a-number"), /max-turns must be an integer/)
 
-  // Gemini ignores it entirely, so an invalid value never fails its runs.
-  assert.equal(resolveMaxTurns(getAgent("gemini"), "not-a-number"), 80)
+  // Gemini ignores it entirely — even an invalid value resolves to null.
+  assert.equal(resolveMaxTurns(getAgent("gemini"), "not-a-number"), null)
+  assert.equal(resolveMaxTurns(getAgent("gemini"), null), null)
 })
 
 test("--agent gemini parses", () => {

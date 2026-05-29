@@ -13,7 +13,7 @@ npx promptmill prompts/my-prompt.md
 ## Quick start
 
 ```sh
-promptmill prompts/my-prompt.md --runs 50 --max-turns 60
+promptmill prompts/my-prompt.md --runs 50
 ```
 
 Each run reads the prompt file fresh, spawns the agent with the prompt on stdin, streams stdout/stderr to your terminal, and appends the same output to `.claude-runs/claude-run-<n>-<YYYYMMDD-HHMMSS>.log`. A non-zero run is logged and the batch continues.
@@ -29,7 +29,7 @@ promptmill <prompt-file> [options] [-- <agent args...>]
 | `--agent <name>` | `claude` | | Agent to run: `claude`, `gemini`, `codex`, or `antigravity`. Sets the default command, label, and log dir. |
 | `--awesometasks <t>` | — | | AwesomeTasks mode. `<t>` is a board/project id, project name, or board URL on `tasks.diestoeckels.de`. The positional `<prompt-file>` becomes optional; without one Promptmill uses its shipped default prompt. Either way, `{{AWESOMETASKS_TARGET}}` in the prompt is replaced with `<t>` before the agent runs. See [AwesomeTasks mode](#awesometasks-mode). |
 | `--runs <n>` | `100` (min 0) | `RUNS` | Number of runs |
-| `--max-turns <n>` | `80` (min 1) | `MAX_TURNS` | Max agent turns per run (**Claude only** — Gemini has no turn-limit flag) |
+| `--max-turns <n>` | _(off — no cap)_ | `MAX_TURNS` | Max agent turns per run, min 1 (**Claude only** — other agents ignore it). Default is no cap so long autonomous runs can finish. Opt in if you want a hard ceiling. |
 | `--log-dir <path>` | per agent | `LOG_DIR` | Per-run log directory (`.claude-runs` / `.gemini-runs`) |
 | `--command <cmd>` | the agent's | | Agent executable to spawn (`claude` / `gemini`) |
 | `--model <name>` | agent's highest | | Model to use. Defaults to the agent's highest (see below). Antigravity has no model flag. |
@@ -59,7 +59,7 @@ Passing `--model`/`--level` to an agent that has no such flag (e.g. `--agent ant
 
 ### Agents
 
-By default promptmill drives **Claude Code** (`claude`). Pass `--agent gemini` to drive the **Google Gemini CLI** instead — it must be installed (`npm i -g @google/gemini-cli`) and authenticated. promptmill runs Gemini headless with `--approval-mode yolo`, feeds the prompt on stdin, and (in the default `pretty` mode) renders Gemini's `stream-json` events into the same live, readable progress. Gemini logs go to `.gemini-runs/`. `--max-turns` applies to Claude only.
+By default promptmill drives **Claude Code** (`claude`). Pass `--agent gemini` to drive the **Google Gemini CLI** instead — it must be installed (`npm i -g @google/gemini-cli`) and authenticated. promptmill runs Gemini headless with `--approval-mode yolo`, feeds the prompt on stdin, and (in the default `pretty` mode) renders Gemini's `stream-json` events into the same live, readable progress. Gemini logs go to `.gemini-runs/`. `--max-turns` applies to Claude only and is off by default.
 
 ```sh
 promptmill prompts/my-prompt.md --agent gemini --runs 25
@@ -92,7 +92,8 @@ promptmill prompts/feature-b.md --session-id feature-b
 
 Per-agent details:
 
-- **Claude** and **Gemini**: promptmill derives a deterministic UUID v5 from the session name (same name → same UUID across machines and time). The first run for a name uses `--session-id <uuid>` to create the session; promptmill then records that UUID as a "session created" marker in `<log-dir>/sessions.json` and every subsequent run (in this batch and future invocations) uses `--resume <uuid>`. (Both CLIs treat `--session-id` as strictly create-only and error on a duplicate id, so the marker is required to avoid `Session ID … is already in use.`)
+- **Claude** and **Gemini**: promptmill derives a deterministic UUID v5 from the session name (same name → same UUID across machines and time). The first run for a name uses `--session-id <uuid>` to create the session; the moment promptmill sees the agent's stream-json init event it writes the UUID to `<log-dir>/sessions.json` as a "session created" marker, and every subsequent run (in this batch and future invocations) uses `--resume <uuid>`. The marker is written even when the run later exits non-zero (e.g. `error_max_turns`), because by then the session has already been created on the agent's side. Both CLIs treat `--session-id` as strictly create-only, so the marker is what prevents `Session ID … is already in use.`
+  In `--output-format text` neither agent emits stream-json events, so promptmill silently runs the first capture run in `stream-json` to read the init event. Once captured, subsequent runs honor the user's chosen format again.
 - **Codex** cannot pin a session id up front. Promptmill runs `codex exec` fresh on first use, captures the assigned thread id from the `--json` stream's `thread.started` event, persists it to `<log-dir>/sessions.json`, and uses `codex exec resume <id>` for every subsequent run.
 - **Antigravity** is best-effort. Promptmill scans `agy --print` output for a recognizable conversation id; if found it is persisted and reused via `--conversation <id>`, otherwise each run starts fresh.
 
@@ -158,7 +159,6 @@ import {runAgentBatch} from "promptmill"
 const {runs, failures} = await runAgentBatch({
   promptFile: "prompts/my-prompt.md",
   runs: 10,
-  maxTurns: 60,
   logDir: ".claude-runs"
 })
 ```

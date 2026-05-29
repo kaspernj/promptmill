@@ -32,7 +32,8 @@ Options:
                          <prompt-file> is also given (then "{{AWESOMETASKS_TARGET}}"
                          in that file is substituted with <t>).
   --runs <n>             Number of runs (default ${DEFAULTS.runs}, min 0). Env: RUNS
-  --max-turns <n>        Max agent turns per run (Claude only; default ${DEFAULTS.maxTurns}, min 1). Env: MAX_TURNS
+  --max-turns <n>        Max agent turns per run (Claude only; min 1; default off — no
+                         cap). Env: MAX_TURNS
   --log-dir <path>       Per-run log directory (default per agent, e.g. .claude-runs / .gemini-runs). Env: LOG_DIR
   --command <cmd>        Agent executable to spawn (default: the agent's, e.g. claude / gemini)
   --model <name>         Model to use (default: the agent's highest — claude opus, gemini pro,
@@ -65,7 +66,7 @@ Precedence for runs/max-turns/log-dir: flag > env var > default.
  * @property {string | null} awesometasksTarget - AwesomeTasks board/project/URL target, or null.
  * @property {string} agent - Selected agent name.
  * @property {string} runsRaw - Raw runs value (flag or env).
- * @property {string} maxTurnsRaw - Raw max-turns value (flag or env).
+ * @property {string | null} maxTurnsRaw - Raw max-turns value (flag or env), or null when omitted (no cap).
  * @property {string | null} logDir - Log directory (null = derive from the agent).
  * @property {string | null} command - Agent command (null = derive from the agent).
  * @property {string} cwd - Working directory.
@@ -101,7 +102,7 @@ export function parseCliOptions(argv, env = process.env) {
     level: null,
     logDir: env.LOG_DIR || null,
     logFilePrefix: null,
-    maxTurnsRaw: env.MAX_TURNS || String(DEFAULTS.maxTurns),
+    maxTurnsRaw: env.MAX_TURNS || null,
     model: null,
     outputFormat: DEFAULTS.outputFormat,
     prefixOutputLines: true,
@@ -199,18 +200,20 @@ export function parseCliOptions(argv, env = process.env) {
 }
 
 /**
- * Resolves the per-run max-turns value for an agent. Agents that do not honor a
- * turn limit (e.g. Gemini) ignore `--max-turns`/`MAX_TURNS` entirely, so an
+ * Resolves the per-run max-turns value for an agent. Defaults to null (no cap)
+ * unless the user explicitly passed `--max-turns` (or `MAX_TURNS`). Agents that
+ * do not honor a turn limit (e.g. Gemini) ignore the value entirely, so an
  * invalid value never fails their runs; only turn-aware agents validate it.
  * @param {{usesMaxTurns: boolean}} agent - The selected agent.
- * @param {string} maxTurnsRaw - Raw max-turns value (flag or env).
- * @returns {number} - The resolved max-turns (the default when unused by the agent).
+ * @param {string | null} maxTurnsRaw - Raw max-turns value (flag or env), or null when omitted.
+ * @returns {number | null} - The resolved max-turns, or null for no cap.
  * @throws {Error} When the agent honors max-turns and the value is invalid.
  */
 export function resolveMaxTurns(agent, maxTurnsRaw) {
-  if (!agent.usesMaxTurns) return DEFAULTS.maxTurns
+  if (maxTurnsRaw === null) return null
+  if (!agent.usesMaxTurns) return null
 
-  return integerOption(maxTurnsRaw, {fallback: DEFAULTS.maxTurns, minimum: 1, name: "max-turns"})
+  return integerOption(maxTurnsRaw, {fallback: null, minimum: 1, name: "max-turns"})
 }
 
 /**
@@ -257,7 +260,7 @@ export async function runCli(argv) {
 
   /** @type {number} */
   let runs
-  /** @type {number} */
+  /** @type {number | null} */
   let maxTurns
 
   /** @type {string[]} */
@@ -338,7 +341,6 @@ export async function runCli(argv) {
     createRenderer: outputFormat === "pretty" ? agent.createRenderer : undefined,
     cwd: options.cwd,
     extractSessionId: agent.extractSessionId,
-    recordKnownSessionUuid: agent.sessionPreknown === true,
     logStderrOnly: outputFormat === "text" && agent.textProgressOnStderr === true,
     label: options.label ?? agent.label,
     logDir: options.logDir ?? agent.logDir,

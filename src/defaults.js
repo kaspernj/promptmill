@@ -4,7 +4,6 @@
  * @typedef {object} PromptmillDefaults
  * @property {string} agent - Default agent name.
  * @property {number} runs - Default number of runs.
- * @property {number} maxTurns - Default maximum agent turns per run.
  * @property {string} logDir - Default per-run log directory.
  * @property {string} command - Default agent executable.
  * @property {string} logFilePrefix - Default per-run log filename prefix.
@@ -16,7 +15,6 @@
 export const DEFAULTS = {
   agent: "claude",
   runs: 100,
-  maxTurns: 80,
   logDir: ".claude-runs",
   command: "claude",
   logFilePrefix: "claude-run-",
@@ -36,7 +34,7 @@ export const OUTPUT_FORMATS = ["pretty", "text", "json", "stream-json"]
  * `pretty` runs Claude in `stream-json` under the hood (promptmill renders the
  * events); `--verbose` is added whenever the Claude format is `stream-json`,
  * which Claude requires in print mode. `text` and `json` are passed through.
- * @param {number} maxTurns - Maximum agent turns for the run.
+ * @param {number | null} maxTurns - Per-run turn cap, or null to omit (default).
  * @param {"pretty" | "text" | "json" | "stream-json"} [outputFormat] - promptmill output mode.
  * @param {string[]} [sessionArgs] - Optional session-pinning args, prepended (e.g. `["--session-id", "<uuid>"]`).
  * @returns {string[]} - CLI arguments for the agent command.
@@ -52,8 +50,7 @@ export function defaultClaudeArgs(maxTurns, outputFormat = DEFAULTS.outputFormat
     "--output-format",
     claudeFormat,
     ...(claudeFormat === "stream-json" ? ["--verbose"] : []),
-    "--max-turns",
-    String(maxTurns)
+    ...(maxTurns === null ? [] : ["--max-turns", String(maxTurns)])
   ]
 }
 

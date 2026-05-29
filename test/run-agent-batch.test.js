@@ -234,7 +234,7 @@ test("captures the agent's session id from the stdout stream and writes it to se
     },
     command: process.execPath,
     cwd: root,
-    extractSessionId: (line) => {
+    extractSessionId: (line, _session) => {
       try {
         const event = JSON.parse(line)
 
@@ -263,7 +263,11 @@ test("captures the agent's session id from the stdout stream and writes it to se
   assert.deepEqual(argsPerRun[1].slice(1), ["resume", "FAKE-THREAD-001"])
 })
 
-test("records session.uuid as the marker after the first successful run when recordKnownSessionUuid is true", async () => {
+test("persists the session marker when the extractor confirms the session was created, even if the run later exits non-zero", async () => {
+  // Regression test for the user-reported bug: a Claude run that hits
+  // error_max_turns (exit 1) has already created the session by the time
+  // max-turns fires. PR #13's status.code === 0 gate refused to persist; this
+  // run uses the extractor directly so a non-zero exit no longer matters.
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const logDir = path.join(root, "logs")
   const captured = collectingStream()
@@ -271,49 +275,64 @@ test("records session.uuid as the marker after the first successful run when rec
 
   /** @type {(string | null)[]} */
   const observedCapturedIds = []
-  await runAgentBatch({
+  const result = await runAgentBatch({
     args: (_turns, sessionInfo) => {
       observedCapturedIds.push(sessionInfo?.capturedId ?? null)
 
-      return [fixture("echo-stdin.js")]
+      return [fixture("claude-init-then-fail.js")]
     },
     command: process.execPath,
     cwd: root,
+    // Claude-style extractor: returns session.uuid on the system.init line.
+    extractSessionId: (line, sess) => {
+      try {
+        const event = JSON.parse(line)
+
+        return event?.type === "system" && event?.subtype === "init" ? (sess?.uuid ?? null) : null
+      } catch { return null }
+    },
     logDir,
     logger: silentLogger,
     promptText: "ignored",
-    recordKnownSessionUuid: true,
     runs: 2,
     session,
     stderr: captured.stream,
     stdout: captured.stream
   })
 
+  // Both runs of the fixture exit 1, but the marker was still written after run 1.
+  assert.equal(result.failures, 2)
   assert.equal(session.capturedId, "preknown-uuid-aaaa")
 
   const persisted = JSON.parse(await fs.readFile(path.join(logDir, "sessions.json"), "utf8"))
   assert.deepEqual(persisted, {"claude:promptmill": "preknown-uuid-aaaa"})
 
-  // Run 1 had no captured id yet; run 2 should already see the marker.
+  // Run 1 had no captured id yet; run 2 saw the marker before spawning.
   assert.deepEqual(observedCapturedIds, [null, "preknown-uuid-aaaa"])
 })
 
 test("a shared log-dir does not cross-pollinate sessions between agents", async () => {
-  // Simulates the user-reported risk: --log-dir is shared. The Claude marker
-  // must not be picked up by a later Codex run with the same session name.
+  // The Claude marker must not be picked up by a later Codex run with the same
+  // session name when the user explicitly shares --log-dir.
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const logDir = path.join(root, "shared-logs")
   const captured = collectingStream()
   const claudeSession = {agentName: "claude", capturedId: null, name: "promptmill", uuid: "preknown-uuid-claude"}
 
   await runAgentBatch({
-    args: [fixture("echo-stdin.js")],
+    args: [fixture("claude-init-then-fail.js")],
     command: process.execPath,
     cwd: root,
+    extractSessionId: (line, sess) => {
+      try {
+        const event = JSON.parse(line)
+
+        return event?.type === "system" && event?.subtype === "init" ? (sess?.uuid ?? null) : null
+      } catch { return null }
+    },
     logDir,
     logger: silentLogger,
     promptText: "ignored",
-    recordKnownSessionUuid: true,
     runs: 1,
     session: claudeSession,
     stderr: captured.stream,
@@ -329,7 +348,7 @@ test("a shared log-dir does not cross-pollinate sessions between agents", async 
   assert.equal(Object.prototype.hasOwnProperty.call(persisted, "promptmill"), false)
 })
 
-test("does not record the preknown session UUID when the first run fails", async () => {
+test("does not persist a session marker when the extractor never fires (e.g. immediate failure before any init event)", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "promptmill-"))
   const logDir = path.join(root, "logs")
   const captured = collectingStream()
@@ -339,18 +358,25 @@ test("does not record the preknown session UUID when the first run fails", async
     args: [fixture("exit-nonzero.js")],
     command: process.execPath,
     cwd: root,
+    extractSessionId: (line, sess) => {
+      try {
+        const event = JSON.parse(line)
+
+        return event?.type === "system" && event?.subtype === "init" ? (sess?.uuid ?? null) : null
+      } catch { return null }
+    },
     logDir,
     logger: silentLogger,
     promptText: "ignored",
-    recordKnownSessionUuid: true,
     runs: 1,
     session,
     stderr: captured.stream,
     stdout: captured.stream
   })
 
-  assert.equal(session.capturedId, null) // a failed first run must not mark the session as created
-
+  // The fixture emits no JSON before exiting, so the extractor never returns
+  // an id — no marker is written and capturedId stays null.
+  assert.equal(session.capturedId, null)
   await assert.rejects(fs.access(path.join(logDir, "sessions.json")))
 })
 

@@ -25,10 +25,9 @@ import {createGeminiStreamRenderer} from "./render-gemini-stream.js"
  * @property {string} [defaultLevel] - Highest reasoning level used by default (omit if the agent has no separate level setting).
  * @property {(model: string) => string[]} [modelArg] - Renders a model selection into CLI args (omit if the agent has no model flag).
  * @property {(level: string) => string[]} [levelArg] - Renders a reasoning level into CLI args (omit if the agent has no level setting).
- * @property {(maxTurns: number, outputFormat: "pretty" | "text" | "json" | "stream-json", passthroughArgs: string[], session: SessionInfo | null) => string[]} buildArgs - Builds the agent's CLI args. `session` may be null when sessions are disabled.
+ * @property {(maxTurns: number | null, outputFormat: "pretty" | "text" | "json" | "stream-json", passthroughArgs: string[], session: SessionInfo | null) => string[]} buildArgs - Builds the agent's CLI args. `session` may be null when sessions are disabled. `maxTurns` is null when the user did not pass `--max-turns`.
  * @property {(prefix: string, sinks: import("node:stream").Writable[]) => {write: (chunk: Buffer | string) => void, flush: () => void}} [createRenderer] - Live `pretty` stream renderer; omit for agents with no JSON event stream (raw text passthrough).
- * @property {(line: string) => string | null} [extractSessionId] - Parses one raw stdout line and returns the agent's session id when present. Used to capture agent-assigned ids (Codex, Antigravity).
- * @property {boolean} [sessionPreknown] - True when the session id is the derived UUID (`session.uuid`), so `runAgentBatch` records that UUID as the "session created" marker after the first successful run. False/absent for agents that capture the id from the stream.
+ * @property {(line: string, session: SessionInfo | null) => string | null} [extractSessionId] - Parses one raw stdout line and returns the id to persist when the line confirms the session was created. For agents that assign their own id (Codex, Antigravity) the returned value is the captured id; for agents where the id is preknown (Claude/Gemini) the returned value is `session.uuid` on a positive confirmation event.
  */
 
 /**
@@ -62,10 +61,32 @@ const claude = {
   defaultLevel: "xhigh",
   modelArg: (model) => ["--model", model],
   levelArg: (level) => ["--effort", level],
-  sessionPreknown: true,
-  buildArgs: (maxTurns, outputFormat, passthroughArgs, session) =>
-    ensureStreamJsonVerbose([...defaultClaudeArgs(maxTurns, outputFormat, claudeGeminiSessionArgs(session)), ...passthroughArgs])
-  ,
+  // Claude's stream-json `system.init` event confirms the session was created
+  // but does not include `session_id` (only `model`). We pre-generate the UUID
+  // and pass it via `--session-id`, so on the init confirmation we simply
+  // return the same UUID for persistence.
+  buildArgs: (maxTurns, outputFormat, passthroughArgs, session) => {
+    // text mode has no stream-json events → session capture cannot fire. Force
+    // stream-json for the first capture run; subsequent runs honor text mode.
+    const needsCapture = session !== null && session.capturedId === null
+    const effectiveFormat = needsCapture && outputFormat === "text" ? "stream-json" : outputFormat
+
+    return ensureStreamJsonVerbose([
+      ...defaultClaudeArgs(maxTurns, effectiveFormat, claudeGeminiSessionArgs(session)),
+      ...passthroughArgs
+    ])
+  },
+  extractSessionId: (line, session) => {
+    if (!line.includes('"type":"system"')) return null
+
+    try {
+      const event = JSON.parse(line)
+
+      return event?.type === "system" && event?.subtype === "init" ? (session?.uuid ?? null) : null
+    } catch {
+      return null
+    }
+  },
   createRenderer: createClaudeStreamRenderer
 }
 
@@ -79,10 +100,28 @@ const gemini = {
   usesMaxTurns: false,
   defaultModel: "pro", // highest alias (resolves to gemini-3-pro-preview / gemini-2.5-pro); Gemini has no separate level flag
   modelArg: (model) => ["-m", model],
-  sessionPreknown: true,
   // Gemini reads the prompt from stdin (no -p) and has no turn-limit CLI flag.
-  buildArgs: (_maxTurns, outputFormat, passthroughArgs, session) =>
-    [...defaultGeminiArgs(outputFormat, claudeGeminiSessionArgs(session)), ...passthroughArgs],
+  // Gemini's stream-json init event embeds session_id directly, so the
+  // extractor parses it from the line.
+  buildArgs: (_maxTurns, outputFormat, passthroughArgs, session) => {
+    // text mode has no stream-json events → force stream-json for the first
+    // capture run so the init event is visible.
+    const needsCapture = session !== null && session.capturedId === null
+    const effectiveFormat = needsCapture && outputFormat === "text" ? "stream-json" : outputFormat
+
+    return [...defaultGeminiArgs(effectiveFormat, claudeGeminiSessionArgs(session)), ...passthroughArgs]
+  },
+  extractSessionId: (line, _session) => {
+    if (!line.includes('"type":"init"')) return null
+
+    try {
+      const event = JSON.parse(line)
+
+      return event?.type === "init" && typeof event.session_id === "string" ? event.session_id : null
+    } catch {
+      return null
+    }
+  },
   createRenderer: createGeminiStreamRenderer
 }
 
@@ -115,7 +154,7 @@ const codex = {
 
     return defaultCodexArgs(effectiveFormat, passthroughArgs, resumeArgs)
   },
-  extractSessionId: (line) => {
+  extractSessionId: (line, _session) => {
     if (!line.includes("thread.started")) return null
 
     try {
@@ -147,7 +186,7 @@ const antigravity = {
 
     return defaultAntigravityArgs(passthroughArgs, sessionArgs)
   },
-  extractSessionId: (line) => {
+  extractSessionId: (line, _session) => {
     // Best-effort: agy --print does not currently document a machine-readable
     // conversation id in its output, so this matches a few plausible shapes and
     // returns null when nothing is found. Treat all four agents uniformly even

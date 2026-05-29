@@ -28,13 +28,12 @@ import {readSessionMapping, writeSessionMapping} from "./session.js"
  * @property {string} [promptFile] - Absolute or cwd-relative path to the prompt file. Required unless `promptText` is given.
  * @property {string} [promptText] - Pre-rendered prompt text. Overrides `promptFile` when set; no file read happens.
  * @property {number} [runs] - Number of runs to perform.
- * @property {number} [maxTurns] - Maximum agent turns per run (passed to the default args).
+ * @property {number | null} [maxTurns] - Maximum agent turns per run, or null to omit the cap. Default null.
  * @property {string} [logDir] - Directory for per-run log files.
  * @property {string} [command] - Agent executable to spawn.
- * @property {string[] | ((maxTurns: number, session: import("./agents.js").SessionInfo | null) => string[])} [args] - Args for the command, or a factory invoked once per run with the current session info.
+ * @property {string[] | ((maxTurns: number | null, session: import("./agents.js").SessionInfo | null) => string[])} [args] - Args for the command, or a factory invoked once per run with the current session info.
  * @property {import("./agents.js").SessionInfo} [session] - Shared session info reused across runs and invocations; mutated in-place when a capturedId is discovered.
- * @property {(line: string) => string | null} [extractSessionId] - Parses one raw stdout line and returns the agent's session id when present.
- * @property {boolean} [recordKnownSessionUuid] - True when the agent's session id is preknown (= `session.uuid`); after a successful first run with no stream-captured id, persist that UUID as the "session created" marker.
+ * @property {(line: string, session: import("./agents.js").SessionInfo | null) => string | null} [extractSessionId] - Parses one raw stdout line and returns the id to persist when the line confirms the session was created.
  * @property {string} [cwd] - Working directory for spawns and log-dir resolution.
  * @property {string} [logFilePrefix] - Per-run log filename prefix.
  * @property {string} [label] - Console banner label.
@@ -60,7 +59,7 @@ export async function runAgentBatch(options) {
     promptFile,
     promptText,
     runs = 100,
-    maxTurns = 80,
+    maxTurns = null,
     logDir = ".claude-runs",
     command = "claude",
     args,
@@ -76,8 +75,7 @@ export async function runAgentBatch(options) {
     shouldStop = () => false,
     onSpawn,
     session,
-    extractSessionId,
-    recordKnownSessionUuid = false
+    extractSessionId
   } = options
 
   if (promptText === undefined && promptFile === undefined) {
@@ -120,7 +118,7 @@ export async function runAgentBatch(options) {
       ? (/** @type {string} */ line) => {
         if (newlyCapturedId !== null) return
 
-        const candidate = extractSessionId(line)
+        const candidate = extractSessionId(line, sessionInfo)
         if (candidate) newlyCapturedId = candidate
       }
       : undefined
@@ -140,22 +138,19 @@ export async function runAgentBatch(options) {
       stdout
     })
 
-    // After a successful first run, persist the session id so subsequent runs
-    // (in this batch and future invocations) take the "resume" path. Two paths:
-    //   - Stream-captured id (Codex thread.started, Antigravity scan).
-    //   - Preknown UUID (Claude/Gemini); we know it from `session.uuid` and
-    //     write it once we've confirmed the create succeeded (exit 0).
-    // Keyed by `<agentName>:<sessionName>` so a shared --log-dir cannot cross-
+    // After the extractor confirms the session was created (by emitting the
+    // agent-side id we should persist), record it so subsequent runs — in this
+    // batch and across invocations — take the "resume" path. The extractor
+    // itself is the gate, not the exit code: a Claude run that hits
+    // `error_max_turns` (exit 1) has already created the session by the time
+    // max-turns fires, so we still want the marker. Keyed by
+    // `<agentName>:<sessionName>` so a shared --log-dir cannot cross-
     // pollinate (e.g. a Claude UUID being mistaken for a Codex thread id).
-    if (sessionInfo !== null && sessionInfo.capturedId === null) {
-      const idToRecord = newlyCapturedId ?? (status.code === 0 && recordKnownSessionUuid ? sessionInfo.uuid : null)
-
-      if (idToRecord !== null) {
-        sessionInfo.capturedId = idToRecord
-        const mapping = readSessionMapping(resolvedLogDir)
-        mapping[`${sessionInfo.agentName}:${sessionInfo.name}`] = idToRecord
-        writeSessionMapping(resolvedLogDir, mapping)
-      }
+    if (sessionInfo !== null && sessionInfo.capturedId === null && newlyCapturedId !== null) {
+      sessionInfo.capturedId = newlyCapturedId
+      const mapping = readSessionMapping(resolvedLogDir)
+      mapping[`${sessionInfo.agentName}:${sessionInfo.name}`] = newlyCapturedId
+      writeSessionMapping(resolvedLogDir, mapping)
     }
 
     if (status.code === 0) {
